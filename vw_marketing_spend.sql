@@ -152,7 +152,7 @@ UNION ALL
 
 SELECT
 	man.supplier AS channel,
-	'N/A - Manual Ad Spend' AS brand,
+	'N/A' AS brand,
 	man.date,
 	CAST(NULL AS STRING) AS campaign_name,
 	man.condition, 
