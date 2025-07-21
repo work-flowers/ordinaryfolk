@@ -91,6 +91,9 @@ consults AS (
 		COALESCE(a.condition, 'N/A') AS condition,
 		COUNT(DISTINCT a.consult_sys_id) AS n
 	FROM all_postgres.all_appointments AS a
+	INNER JOIN customer_acq AS ca
+		ON a.patient_id = ca.patient_id
+		AND a.date <= DATE_ADD(ca.acquisition_date, INTERVAL 7 DAY)
 	GROUP BY 1,2,3,4
 ),
 
