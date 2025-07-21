@@ -1,7 +1,17 @@
 DROP VIEW IF EXISTS cac.marketing_cost_per_action;
 CREATE VIEW cac.marketing_cost_per_action AS
 
-WITH signups AS (
+WITH customer_acq AS (
+	SELECT DISTINCT
+		cm.customer_id,
+		p.sys_id AS patient_id,
+		cm.acquisition_date,
+	FROM finance_metrics.contribution_margin AS cm
+	INNER JOIN all_postgres.patient AS p	
+		ON cm.customer_id = p.stripe_customer_id
+),
+
+signups AS (
     SELECT
         DATE(t.timestamp) AS date,
         LOWER(s.region) AS country,
@@ -48,6 +58,11 @@ checkouts AS (
 	INNER JOIN segment.checkout_completed_products AS ccp
 		ON c.message_id = ccp.message_id
 		AND ccp.name = 'Teleconsultation'
+    INNER JOIN all_postgres.order AS o
+    	ON c.order_id = o.sys_id
+	INNER JOIN customer_acq AS ca
+		ON o.patient_id = ca.patient_id
+		AND DATE(t.timestamp) <= DATE_ADD(ca.acquisition_date, INTERVAL 7 DAY)
     LEFT JOIN cac.utm_source_map AS map 
     	ON c.utm_source = map.context_campaign_source
 	LEFT JOIN google_sheets.postgres_stripe_condition_map AS cmap
