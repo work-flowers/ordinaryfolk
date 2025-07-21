@@ -7,6 +7,7 @@ CREATE VIEW all_postgres.all_appointments AS (
 		cs.consultation_session_type,
 		o.short_id AS order_short_id,
 		cs.order_sys_id,
+		o.patient_id,
 		cs.consultation_session_status,
 		cs.progress_status,
 		ca.consult_type,
