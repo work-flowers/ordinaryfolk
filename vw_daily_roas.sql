@@ -37,8 +37,12 @@ all_keys AS (
 			ELSE 'N/A'
 			END AS condition,
 		region AS country,
-		brand
+		COALESCE(brand, 'N/A') AS brand
 	FROM finance_metrics.contribution_margin
+	WHERE
+		1 = 1
+		AND COALESCE(line_item_amount_usd, total_charge_amount_usd) > 0
+
 )
 
 
@@ -56,7 +60,7 @@ SELECT
 FROM all_keys AS k
 LEFT JOIN finance_metrics.contribution_margin AS cm
 	ON k.date = cm.purchase_date
-	AND k.brand = cm.brand
+	AND k.brand = COALESCE(cm.brand, 'N/A')
 	AND k.condition = (
 		CASE 
 			WHEN cm.condition IN ('ED', 'PE') THEN 'ED + PE'

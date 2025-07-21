@@ -12,7 +12,7 @@ WITH sub_starts AS (
 patient_brand_stripe_ids AS (
 	SELECT DISTINCT
 		stripe_customer_id,
-		from_platform_env AS brand
+		INITCAP(from_platform_env) AS brand
 	FROM all_postgres.patient
 ),
 
@@ -350,7 +350,7 @@ atome_final AS (
 			ELSE 'One-Time' 
 			END AS purchase_type,
 		'manual' AS billing_reason,
-		p.from_platform_env AS brand,
+		INITCAP(p.from_platform_env) AS brand,
 		o.patient_id AS customer_id,
 		p.email,
 		am.atome_order_id AS charge_id,
