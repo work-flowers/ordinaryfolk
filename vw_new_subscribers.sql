@@ -3,12 +3,20 @@ CREATE VIEW finance_metrics.new_subs AS
 
 WITH first_sub AS (
     SELECT
-        customer_id,
-        region,
-        MIN(DATE(created)) AS first_sub_created
-    FROM all_stripe.subscription_history
-    WHERE status = 'active'
-    GROUP BY 1,2
+        sh.customer_id,
+        sh.region,
+        JSON_VALUE(pr.metadata, '$.condition') AS condition,
+        DATE(sh.created) AS first_sub_created
+    FROM all_stripe.subscription_history AS sh
+    LEFT JOIN all_stripe.subscription_item AS si
+    	ON sh.id = si.subscription_id
+	LEFT JOIN all_stripe.plan AS pl
+		ON si.plan_id = pl.id
+	LEFT JOIN all_stripe.product AS pr
+		ON pl.product_id = pr.id
+    WHERE 
+    	sh.status = 'active'
+	QUALIFY ROW_NUMBER() OVER(PARTITION BY sh.customer_id ORDER BY sh.created DESC) = 1
 ),
 
 first_charge AS (
@@ -24,7 +32,8 @@ first_charge AS (
 SELECT
     fs.customer_id,
     fs.region,
-    fs.first_sub_created
+    fs.first_sub_created,
+    fs.condition,
 FROM first_sub AS fs
 LEFT JOIN first_charge AS fc
     ON fs.customer_id = fc.customer_id
