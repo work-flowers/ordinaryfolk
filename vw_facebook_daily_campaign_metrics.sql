@@ -43,7 +43,6 @@ revenue AS (
 	WHERE 
 		1 = 1
 		AND aav.action_type = 'purchase'
-		AND aav.date = '2022-08-10'
 	GROUP BY 1,2
 ),
 
