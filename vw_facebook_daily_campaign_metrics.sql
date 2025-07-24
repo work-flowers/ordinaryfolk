@@ -19,7 +19,10 @@ ads AS (
 ),
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 =======
+=======
+>>>>>>> Stashed changes
 fb_brands AS (
 	SELECT
 		CAST(id AS STRING) AS account_id,
@@ -28,6 +31,9 @@ fb_brands AS (
     FROM facebook_ads.account_history
 	QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY created_time DESC) = 1
 ),
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 
 revenue AS (
