@@ -70,8 +70,8 @@ SELECT
     	JSON_VALUE(targeting.targeting_geo_locations_regions, '$[0].country'),
     	JSON_VALUE(targeting.targeting_geo_locations_custom_locations, '$[0].country')
     ) AS country,
-	SUM(COALESCE(r.total_purchase_revenue, 0)) AS purchase_revenue,
-	SUM(s.total_spend) AS spend
+	SUM(COALESCE(r.total_purchase_revenue / fx.fx_to_usd, 0)) AS purchase_revenue,
+	SUM(s.total_spend / fx.fx_to_usd) AS spend
 FROM spend AS s 
 LEFT JOIN revenue AS r
 	ON r.ad_id = s.ad_id
@@ -84,6 +84,8 @@ LEFT JOIN campaigns c
 	ON ads.campaign_id = c.campaign_id
 LEFT JOIN accounts
 	ON c.account_id = accounts.account_id
+LEFT JOIN ref.fx_rates AS fx
+	ON LOWER(accounts.currency) = LOWER(fx.currency)
 WHERE 
 	s.total_spend > 0
 GROUP BY 1,2,3,4,5,6
