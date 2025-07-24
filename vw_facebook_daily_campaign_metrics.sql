@@ -13,12 +13,13 @@ WITH campaigns AS (
 ads AS (
 	SELECT	
 		CAST(id AS STRING) AS ad_id,
+		CAST(ad_set_id AS STRING) AS ad_set_id,
 		CAST(campaign_id AS STRING) AS campaign_id
 	FROM facebook_ads.ad_history
 	QUALIFY ROW_NUMBER() OVER(PARTITION BY id ORDER BY updated_time DESC) = 1
 ),
 
-fb_brands AS (
+accounts AS (
 	SELECT
 		CAST(id AS STRING) AS account_id,
 		currency,
@@ -27,23 +28,28 @@ fb_brands AS (
 	QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY created_time DESC) = 1
 ),
 
+targeting AS (
+	SELECT *
+	FROM facebook_ads.ad_set_history
+	QUALIFY ROW_NUMBER() OVER(PARTITION BY id ORDER BY updated_time DESC) = 1
+),
+
 revenue AS (
 	SELECT
-		ads.campaign_id,
+		CAST(aav.ad_id AS STRING) AS ad_id,		
     	aav.date,
     	SUM(aav.value) AS total_purchase_revenue
   	FROM facebook_ads.basic_ad_action_values aav
-  	INNER JOIN ads
-    	ON aav.ad_id = ads.ad_id	
 	WHERE 
 		1 = 1
 		AND aav.action_type = 'purchase'
+		AND aav.date = '2022-08-10'
 	GROUP BY 1,2
 ),
 
 spend AS (
 	SELECT
-		CAST(ads.campaign_id AS STRING) AS campaign_id,
+		CAST(ba.ad_id AS STRING) AS ad_id,
 		ba.date,
 		SUM(ba.spend) AS total_spend
 	FROM facebook_ads.basic_ad AS ba
@@ -53,21 +59,31 @@ spend AS (
 )
 
 SELECT
-	r.date,
-	r.campaign_id,
+	s.date,
+	c.campaign_id,
 	c.campaign_name,
 	c.condition,
-	fb_brands.brand,
-	r.total_purchase_revenue,
-	s.total_spend
-FROM revenue r
-INNER JOIN spend s
-	ON r.campaign_id = s.campaign_id 
+	accounts.brand,
+	COALESCE(
+    	REGEXP_REPLACE(targeting.targeting_geo_locations_countries, r'[\[\]"]', ''),
+    	JSON_VALUE(targeting.targeting_geo_locations_cities, '$[0].country'),
+    	JSON_VALUE(targeting.targeting_geo_locations_regions, '$[0].country'),
+    	JSON_VALUE(targeting.targeting_geo_locations_custom_locations, '$[0].country')
+    ) AS country,
+	SUM(COALESCE(r.total_purchase_revenue, 0)) AS purchase_revenue,
+	SUM(s.total_spend) AS spend
+FROM spend AS s 
+LEFT JOIN revenue AS r
+	ON r.ad_id = s.ad_id
 	AND r.date = s.date
+INNER JOIN ads
+	ON s.ad_id = ads.ad_id
+LEFT JOIN targeting	
+	ON ads.ad_set_id = CAST(targeting.id AS STRING)
 LEFT JOIN campaigns c
-	ON r.campaign_id = c.campaign_id
-LEFT JOIN fb_brands
-	ON c.account_id = fb_brands.account_id
+	ON ads.campaign_id = c.campaign_id
+LEFT JOIN accounts
+	ON c.account_id = accounts.account_id
 WHERE 
 	s.total_spend > 0
-ORDER BY r.date DESC
+GROUP BY 1,2,3,4,5,6
