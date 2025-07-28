@@ -2,9 +2,14 @@
 -- Facebook Ads Performance Report with Revenue and Spend Analysis
 -- ================================================================
 -- This query creates a comprehensive report combining Facebook Ads spend data 
--- with purchase revenue, normalized to USD using foreign exchange rates.
--- CTE 1: Get the latest campaign information and conditions
-WITH campaigns AS (
+
+DROP VIEW IF EXISTS cac.facebook_campaign_metrics;
+CREATE VIEW cac.facebook_campaign_metrics AS 
+
+
+WITH 
+	-- CTE 1: Get the latest campaign information and conditions
+	campaigns AS (
 		SELECT
 			CAST(ch.id AS STRING) AS campaign_id, -- Convert campaign ID to string for consistent joins
 			ch.name AS campaign_name, -- Campaign display name
@@ -91,6 +96,7 @@ SELECT
 	c.campaign_name, -- Campaign display name
 	c.condition, -- Custom campaign condition from mapping
 	accounts.brand, -- Brand name extracted from account
+	accounts.currency, 
 	-- Complex country extraction logic with fallback hierarchy
 	-- Tries multiple targeting fields to determine the target country
 	COALESCE(
@@ -99,12 +105,12 @@ SELECT
 		JSON_VALUE(targeting.targeting_geo_locations_regions, '$[0].country'), -- Extract country from first region
 		JSON_VALUE(targeting.targeting_geo_locations_custom_locations, '$[0].country') -- Extract country from custom locations
 	) AS country,
-	mt.cpr_threshold / mtfx.fx_to_usd AS cpr_threshold_usd,
+	mt.cpr_threshold,
 	-- COALESCE handles cases where there's no revenue data (sets to 0)
 	SUM(COALESCE(p.total_purchase_volume, 0)) AS purchase_volume,
-	SUM(COALESCE(r.total_purchase_revenue / fx.fx_to_usd, 0)) AS purchase_revenue,
+	SUM(COALESCE(r.total_purchase_revenue, 0)) AS purchase_revenue,
 	-- Convert spend to USD using foreign exchange rates
-	SUM(s.total_spend / fx.fx_to_usd) AS spend
+	SUM(s.total_spend) AS spend
 FROM spend AS s -- Start with spend data as the base
 
 -- Left join revenue to include spend records even without corresponding revenue
@@ -129,23 +135,17 @@ LEFT JOIN campaigns AS c
 	ON ads.campaign_id = c.campaign_id
 
 -- Left join accounts to get brand and currency information
-LEFT JOIN accounts 
+INNER JOIN accounts 
 	ON c.account_id = accounts.account_id
+	AND accounts.currency = 'SGD' -- only include ad accounts denominated in SGD
 
--- Left join FX rates to convert local currency to USD
--- Uses case-insensitive matching for currency codes
-LEFT JOIN ref.fx_rates AS fx 
-	ON LOWER(accounts.currency) = LOWER(fx.currency)
 
 -- Left join CPR thresholds for "winning" campaigns	
 LEFT JOIN google_sheets.marketing_thresholds AS mt
 	ON c.condition = mt.condition
 
--- Left join FX rates again to convert CPR thresholds to USD
-LEFT JOIN ref.fx_rates AS mtfx
-	ON LOWER(mt.currency) = LOWER(mtfx.currency)
 WHERE
 	1 = 1
 	AND s.total_spend > 0 -- Only include records with actual spend (exclude $0 spend days)
 
-GROUP BY 1,2,3,4,5,6,7
+GROUP BY 1,2,3,4,5,6,7,8
