@@ -99,7 +99,7 @@ SELECT
 		JSON_VALUE(targeting.targeting_geo_locations_regions, '$[0].country'), -- Extract country from first region
 		JSON_VALUE(targeting.targeting_geo_locations_custom_locations, '$[0].country') -- Extract country from custom locations
 	) AS country,
-	mt.cpr_threshold,
+	mt.cpr_threshold / mtfx.fx_to_usd AS cpr_threshold_usd,
 	-- COALESCE handles cases where there's no revenue data (sets to 0)
 	SUM(COALESCE(p.total_purchase_volume, 0)) AS purchase_volume,
 	SUM(COALESCE(r.total_purchase_revenue / fx.fx_to_usd, 0)) AS purchase_revenue,
@@ -112,6 +112,7 @@ LEFT JOIN revenue AS r
 	ON s.ad_id = r.ad_id
 	AND s.date = r.date
 
+-- Left join purchase volumes for calculating CPR
 LEFT JOIN purchases AS p
 	ON s.ad_id = p.ad_id
 	AND s.date = p.date
@@ -135,9 +136,14 @@ LEFT JOIN accounts
 -- Uses case-insensitive matching for currency codes
 LEFT JOIN ref.fx_rates AS fx 
 	ON LOWER(accounts.currency) = LOWER(fx.currency)
-	
+
+-- Left join CPR thresholds for "winning" campaigns	
 LEFT JOIN google_sheets.marketing_thresholds AS mt
-	ON c.condition = mt.condition	
+	ON c.condition = mt.condition
+
+-- Left join FX rates again to convert CPR thresholds to USD
+LEFT JOIN ref.fx_rates AS mtfx
+	ON LOWER(mt.currency) = LOWER(mtfx.currency)
 WHERE
 	1 = 1
 	AND s.total_spend > 0 -- Only include records with actual spend (exclude $0 spend days)
