@@ -92,60 +92,38 @@ WITH
 	-- ================================================================
 SELECT
 	s.date, -- Reporting date
+	ads.ad_id, -- AD ID added for granularity
 	c.campaign_id, -- Campaign identifier
 	c.campaign_name, -- Campaign display name
 	c.condition, -- Custom campaign condition from mapping
 	accounts.brand, -- Brand name extracted from account
 	accounts.currency, 
-	-- Complex country extraction logic with fallback hierarchy
-	-- Tries multiple targeting fields to determine the target country
+	-- Country logic remains
 	COALESCE(
-		REGEXP_REPLACE(targeting.targeting_geo_locations_countries, r'[\[\]"]', ''), -- Remove JSON formatting from countries
-		JSON_VALUE(targeting.targeting_geo_locations_cities, '$[0].country'), -- Extract country from first city
-		JSON_VALUE(targeting.targeting_geo_locations_regions, '$[0].country'), -- Extract country from first region
-		JSON_VALUE(targeting.targeting_geo_locations_custom_locations, '$[0].country') -- Extract country from custom locations
+		REGEXP_REPLACE(targeting.targeting_geo_locations_countries, r'[\[\]"]', ''), 
+		JSON_VALUE(targeting.targeting_geo_locations_cities, '$[0].country'),
+		JSON_VALUE(targeting.targeting_geo_locations_regions, '$[0].country'),
+		JSON_VALUE(targeting.targeting_geo_locations_custom_locations, '$[0].country')
 	) AS country,
 	mt.cpr_threshold,
-	-- COALESCE handles cases where there's no revenue data (sets to 0)
 	SUM(COALESCE(p.total_purchase_volume, 0)) AS purchase_volume,
 	SUM(COALESCE(r.total_purchase_revenue, 0)) AS purchase_revenue,
-	-- Convert spend to USD using foreign exchange rates
 	SUM(s.total_spend) AS spend
-FROM spend AS s -- Start with spend data as the base
-
--- Left join revenue to include spend records even without corresponding revenue
+FROM spend AS s
 LEFT JOIN revenue AS r 
-	ON s.ad_id = r.ad_id
-	AND s.date = r.date
-
--- Left join purchase volumes for calculating CPR
+	ON s.ad_id = r.ad_id AND s.date = r.date
 LEFT JOIN purchases AS p
-	ON s.ad_id = p.ad_id
-	AND s.date = p.date
-
--- Inner join ads to get campaign/ad set hierarchy (required for targeting info)
+	ON s.ad_id = p.ad_id AND s.date = p.date
 INNER JOIN ads 
 	ON s.ad_id = ads.ad_id
-	-- Left join targeting to get geographic and audience information
 LEFT JOIN targeting 
 	ON ads.ad_set_id = CAST(targeting.id AS STRING)
-
--- Left join campaigns to get campaign-level information and conditions
 LEFT JOIN campaigns AS c 
 	ON ads.campaign_id = c.campaign_id
-
--- Left join accounts to get brand and currency information
 INNER JOIN accounts 
-	ON c.account_id = accounts.account_id
-	AND accounts.currency = 'SGD' -- only include ad accounts denominated in SGD
-
-
--- Left join CPR thresholds for "winning" campaigns	
+	ON c.account_id = accounts.account_id AND accounts.currency = 'SGD'
 LEFT JOIN google_sheets.marketing_thresholds AS mt
 	ON c.condition = mt.condition
-
 WHERE
-	1 = 1
-	AND s.total_spend > 0 -- Only include records with actual spend (exclude $0 spend days)
-
-GROUP BY 1,2,3,4,5,6,7,8
+	s.total_spend > 0
+GROUP BY 1,2,3,4,5,6,7,8,9
