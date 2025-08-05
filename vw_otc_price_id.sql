@@ -29,6 +29,8 @@ SELECT
   u.price_id,
   u.quantity,
   px.currency,
+  u.discount_amount / fx.fx_to_usd AS discount_amount_usd,
+  u.shipping_amount / fx.fx_to_usd AS shipping_amount_usd,
   px.unit_amount / fx.fx_to_usd / COALESCE(sub.subunits, 100) AS unit_amount_usd,
   pr.name AS product_name,
   JSON_VALUE(pr.metadata, '$.condition') AS condition
