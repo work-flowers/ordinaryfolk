@@ -34,7 +34,7 @@ SELECT
 	px.currency,
 	u.discount_amount AS discount_amount_local,
 	u.shipping_amount AS shipping_amount_local,
-	u.unit_amount AS unit_amount_local
+	px.unit_amount AS unit_amount_local
 FROM unnested AS u
 LEFT JOIN all_stripe.price AS px
 	ON u.price_id = LOWER(px.id)
