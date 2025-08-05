@@ -26,22 +26,18 @@ unnested AS (
 SELECT 
 	u.payment_intent_id,
   	u.description,
+	JSON_VALUE(pr.metadata, '$.condition') AS condition,
 	pr.name AS product_name,
 	pr.id AS product_id,
 	u.price_id,
 	u.quantity,
 	px.currency,
-	u.discount_amount / fx.fx_to_usd AS discount_amount_usd,
-	u.shipping_amount / fx.fx_to_usd AS shipping_amount_usd,
-	px.unit_amount / fx.fx_to_usd / COALESCE(sub.subunits, 100) AS unit_amount_usd,
-	JSON_VALUE(pr.metadata, '$.condition') AS condition
+	u.discount_amount AS discount_amount_local,
+	u.shipping_amount AS shipping_amount_local,
+	px.unit_amount AS unit_amount_local
 FROM unnested AS u
 LEFT JOIN all_stripe.price AS px
 	ON u.price_id = LOWER(px.id)
 LEFT JOIN all_stripe.product AS pr
 	ON px.product_id = pr.id
-LEFT JOIN ref.fx_rates AS fx
-	ON px.currency = fx.currency
-LEFT JOIN ref.stripe_currency_subunits AS sub
-	ON px.currency = sub.currency
 ;

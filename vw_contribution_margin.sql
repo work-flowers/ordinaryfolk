@@ -53,18 +53,19 @@ stripe_data AS (
 		ch.amount / fx.fx_to_usd / COALESCE(sub.subunits, 100) AS total_charge_amount_usd,
 		COALESCE(ch.amount_refunded / ch.amount, 0) AS refund_rate,
 		ch.amount_refunded / fx.fx_to_usd / COALESCE(sub.subunits, 100) AS amount_refunded_usd,
-		COALESCE(prod.id, tp.product_id) AS product_id,
-		COALESCE(prod.name, tp.product_name) AS product_name,
-		COALESCE(px.id, tp.price_id) AS price_id,
-		COALESCE(JSON_EXTRACT_SCALAR(prod.metadata, '$.condition'), tp.condition) AS condition,
-		COALESCE(ii.quantity, 1) AS quantity,
+		COALESCE(prod.id, tp.product_id, otc.product_id) AS product_id,
+		COALESCE(prod.name, tp.product_name, otc.product_name) AS product_name,
+		COALESCE(px.id, tp.price_id, otc.price_id) AS price_id,
+		COALESCE(JSON_EXTRACT_SCALAR(prod.metadata, '$.condition'), tp.condition, otc.condition) AS condition,
+		COALESCE(ii.quantity, otc.quantity, 1) AS quantity,
 		ch.currency,
 		ch.amount / (
 			CASE 
 				WHEN inv.subtotal > 0 THEN inv.subtotal
+				WHEN otc.unit_amount_local > 0 THEN SUM(otc.unit_amount_local) OVER(PARTITION BY ch.payment_intent_id) / otc.unit_amount_local
 				ELSE ch.amount
 				END
-			) * ii.amount / fx.fx_to_usd / COALESCE(sub.subunits, 100) AS line_item_amount_usd,
+			) * COALESCE(ii.amount,1) / fx.fx_to_usd / COALESCE(sub.subunits, 100) AS line_item_amount_usd,
 		-- note that all_stripe.product_cost does not include COGS for teleconsults
 		-- those are updated manually on a monthly basis in google_sheets.opex
 		-- pipeline for finance_metrics.monthly_contribution_margin incorporates teleconsult COGS
@@ -81,6 +82,9 @@ stripe_data AS (
 		ON ch.customer_id = cust.id
 	LEFT JOIN patient_brand_stripe_ids AS pbsi
 		ON ch.customer_id = pbsi.stripe_customer_id
+	LEFT JOIN all_stripe.otc_price_id AS otc
+		ON ch.payment_intent_id = otc.payment_intent_id
+		AND ch.invoice_id IS NULL -- ONLY for OTC charges which have no invoice_id
 	INNER JOIN all_stripe.balance_transaction AS bt
 		ON ch.balance_transaction_id = bt.id
 	INNER JOIN ref.fx_rates AS fx
