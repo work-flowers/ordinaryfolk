@@ -1,6 +1,10 @@
+-- Drop the existing view if it exists and recreate it
+-- This view consolidates contribution margin data from multiple sales channels
+
 DROP VIEW IF EXISTS finance_metrics.contribution_margin; 
 CREATE VIEW finance_metrics.contribution_margin AS
 
+-- CTE to get subscription start dates from Stripe subscription history
 WITH sub_starts AS (
 	SELECT DISTINCT
 		id AS subscription_id,
@@ -8,7 +12,7 @@ WITH sub_starts AS (
 	FROM all_stripe.subscription_history
 ),
 
-
+-- CTE to map Stripe customer IDs to patient brands
 patient_brand_stripe_ids AS (
 	SELECT DISTINCT
 		stripe_customer_id,
@@ -16,49 +20,57 @@ patient_brand_stripe_ids AS (
 	FROM all_postgres.patient
 ),
 
+-- CTE to identify teleconsultation prices and products
+-- Filters products with 'tele' in the name to separate teleconsult services
 tel_price AS (
 
 		SELECT
 			px.id AS price_id,
 			px.product_id,
 			pr.name AS product_name,
-			COALESCE(JSON_VALUE(pr.metadata, '$.condition'), 'Services') AS condition
+			COALESCE(JSON_VALUE(pr.metadata, '$.condition'), 'Services') AS condition -- Extract condition from product metadata, default to 'Services' if not found
 		FROM all_stripe.product AS pr
 		INNER JOIN all_stripe.price AS px
 			ON pr.id = px.product_id
-		WHERE LOWER(pr.name) LIKE '%tele%'
+		WHERE LOWER(pr.name) LIKE '%tele%' -- Filter for teleconsultation products
 ),
 
+-- Main CTE for Stripe payment data
+-- Processes all Stripe charges and associated invoice/subscription data
 stripe_data AS (
 
 	SELECT
 		'Stripe' AS sales_channel,
 		ch.region,
-		bt.type,
+		bt.type, -- Balance transaction type (payment, payout, etc.)
 		CASE 
 			WHEN ii.subscription_id IS NULL THEN 'One-Time'
 			ELSE 'Subscription'
-			END AS purchase_type,
-		COALESCE(inv.billing_reason, 'manual') AS billing_reason,
+			END AS purchase_type, -- Determine if this is a one-time payment or subscription
+		COALESCE(inv.billing_reason, 'manual') AS billing_reason, -- Why the invoice was created
 		pbsi.brand,
 		ch.customer_id,
 		cust.email,
 		ch.id AS charge_id,
-		JSON_VALUE(ch.metadata, '$.orderId') AS order_sys_id,
+		JSON_VALUE(ch.metadata, '$.orderId') AS order_sys_id, -- Extract internal order ID from charge metadata
 		ch.payment_intent_id,
 		inv.subscription_id,
-		px.recurring_interval,
-		px.recurring_interval_count,
+		px.recurring_interval,  -- monthly, yearly, etc.
+		px.recurring_interval_count, -- how many intervals (e.g., 3 months)
 		DATE(ch.created) AS purchase_date,
-		ch.amount / fx.fx_to_usd / COALESCE(sub.subunits, 100) AS total_charge_amount_usd,
-		COALESCE(ch.amount_refunded / ch.amount, 0) AS refund_rate,
+		ch.amount / fx.fx_to_usd / COALESCE(sub.subunits, 100) AS total_charge_amount_usd, -- Convert charge amount to USD using FX rates and currency subunits
+		COALESCE(ch.amount_refunded / ch.amount, 0) AS refund_rate, -- Percentage refunded
 		ch.amount_refunded / fx.fx_to_usd / COALESCE(sub.subunits, 100) AS amount_refunded_usd,
+		
+		-- Product identification with fallbacks for different charge types
 		COALESCE(prod.id, tp.product_id, otc.product_id) AS product_id,
 		COALESCE(prod.name, tp.product_name, otc.product_name) AS product_name,
 		COALESCE(px.id, tp.price_id, otc.price_id) AS price_id,
-		COALESCE(JSON_EXTRACT_SCALAR(prod.metadata, '$.condition'), tp.condition, otc.condition) AS condition,
+		COALESCE(JSON_EXTRACT_SCALAR(prod.metadata, '$.condition'), tp.condition, otc.condition) AS condition, -- Medical condition being treated
 		COALESCE(ii.quantity, otc.quantity, 1) AS quantity,
 		ch.currency,
+		
+		-- Calculate line item amount proportionally based on invoice breakdown
 		ch.amount / (
 			CASE 
 				WHEN inv.subtotal > 0 THEN inv.subtotal
@@ -66,15 +78,14 @@ stripe_data AS (
 				ELSE ch.amount
 				END
 			) * COALESCE(ii.amount,1) / fx.fx_to_usd / COALESCE(sub.subunits, 100) AS line_item_amount_usd,
-		-- note that all_stripe.product_cost does not include COGS for teleconsults
-		-- those are updated manually on a monthly basis in google_sheets.opex
-		-- pipeline for finance_metrics.monthly_contribution_margin incorporates teleconsult COGS
+		
+		-- Cost of Goods Sold (COGS) - note: teleconsult COGS handled separately in monthly pipeline
 		pc.cogs / fx.fx_to_usd AS cogs,
 		pc.cashback,
-		t.rate AS gst_vat,
+		t.rate AS gst_vat, -- Tax rate (GST/VAT) applicable, in % terms
 		COALESCE(bt.fee / bt.amount, 0) AS fee_rate,
 		pc.packaging / fx.fx_to_usd AS packaging,
-		MIN(DATE(ch.created)) OVER(PARTITION BY ch.customer_id) AS acquisition_date
+		MIN(DATE(ch.created)) OVER(PARTITION BY ch.customer_id) AS acquisition_date -- Customer acquisition date (first purchase date for this customer)
 	FROM all_stripe.charge AS ch
 	LEFT JOIN all_stripe.payment_intent AS pi
 		ON ch.payment_intent_id = pi.id
@@ -82,6 +93,8 @@ stripe_data AS (
 		ON ch.customer_id = cust.id
 	LEFT JOIN patient_brand_stripe_ids AS pbsi
 		ON ch.customer_id = pbsi.stripe_customer_id
+	
+	-- Join OTC (over-the-counter) pricing for non-invoice charges
 	LEFT JOIN all_stripe.otc_price_id AS otc
 		ON ch.payment_intent_id = otc.payment_intent_id
 		AND ch.invoice_id IS NULL -- ONLY for OTC charges which have no invoice_id
@@ -89,8 +102,13 @@ stripe_data AS (
 		ON ch.balance_transaction_id = bt.id
 	INNER JOIN ref.fx_rates AS fx
 		ON ch.currency = fx.currency
+	
+	-- Handle Stripe currency subunits (e.g., cents vs dollars)
+	-- https://docs.stripe.com/currencies#zero-decimal
 	LEFT JOIN ref.stripe_currency_subunits AS sub
 		ON fx.currency = sub.currency
+	
+	-- Join invoice and line item data for subscription/invoice-based charges
 	LEFT JOIN all_stripe.invoice AS inv
 		ON ch.invoice_id = inv.id
 	LEFT JOIN all_stripe.invoice_line_item AS ii
@@ -99,11 +117,15 @@ stripe_data AS (
 		ON ii.price_id = px.id
 	LEFT JOIN all_stripe.product AS prod
 		ON px.product_id = prod.id
+	
+	-- Join cost data with date range validation
 	LEFT JOIN all_stripe.product_cost AS pc
 		ON px.id = pc.price_id
 		AND DATE(ch.created) BETWEEN pc.from_date AND pc.to_date
 	LEFT JOIN tel_price AS tp
 		ON COALESCE(JSON_EXTRACT_SCALAR(pi.metadata, '$.paymentIntentPriceId'), JSON_EXTRACT_SCALAR(pi.metadata, '$.stripePriceIds')) = tp.price_id
+	
+	-- Join tax data with date range validation
 	LEFT JOIN ref.tax_rate_history AS t
 		ON ch.region = t.region
 		AND DATE(ch.created) BETWEEN t.from_date AND t.to_date
@@ -112,11 +134,12 @@ stripe_data AS (
 		
 ),
 
+-- CTE for TikTok Shop sales data
 tiktok_data AS(
 
 	SELECT	
 		'TikTok' AS sales_channel,
-		'sg' AS region,
+		'sg' AS region, -- TikTok sales are Singapore-based
 		CAST(NULL AS STRING) AS type,
 		'One-Time' AS purchase_type,
 		'manual' AS billing_reason,
@@ -130,7 +153,9 @@ tiktok_data AS(
 		CAST(NULL AS STRING) AS recurring_interval,
 		NULL AS recurring_interval_count,
 		tik.created_time AS purchase_date,
-		0 AS total_charge_amount_usd,
+		0 AS total_charge_amount_usd, -- TikTok doesn't provide total charge info
+		
+		-- Calculate refund rate as percentage of subtotal
 		SAFE_DIVIDE(COALESCE(tik.order_refund_amount, 0), COALESCE(tik.sku_subtotal_after_discount, 1)) AS refund_rate,
 		COALESCE(tik.order_refund_amount, 0) / fx.fx_to_usd AS amount_refunded_usd,
 		CAST(tik.sku_id AS STRING) AS product_id,
