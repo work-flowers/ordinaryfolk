@@ -137,15 +137,15 @@ stripe_data AS (
 -- CTE for TikTok Shop sales data
 tiktok_data AS(
 
-	SELECT	
+		SELECT	
 		'TikTok' AS sales_channel,
-		'sg' AS region, -- TikTok sales are Singapore-based
+		'sg' AS region,  -- TikTok sales are Singapore-based
 		CAST(NULL AS STRING) AS type,
-		'One-Time' AS purchase_type,
+		'One-Time' AS purchase_type,  -- TikTok doesn't support subscriptions
 		'manual' AS billing_reason,
-		'N/A' AS brand,
+		'N/A' AS brand,  -- No brand differentiation for TikTok
 		tik.buyer_username AS customer_id,
-		CAST(NULL AS STRING) AS email,
+		CAST(NULL AS STRING) AS email,  -- Email not available from TikTok
 		CAST(tik.order_id AS STRING) AS charge_id,
 		CAST(NULL AS STRING) AS order_sys_id,
 		CAST(NULL AS STRING) AS payment_intent_id,
@@ -153,8 +153,7 @@ tiktok_data AS(
 		CAST(NULL AS STRING) AS recurring_interval,
 		NULL AS recurring_interval_count,
 		tik.created_time AS purchase_date,
-		0 AS total_charge_amount_usd, -- TikTok doesn't provide total charge info
-		
+		0 AS total_charge_amount_usd,  -- TikTok doesn't provide total charge info
 		-- Calculate refund rate as percentage of subtotal
 		SAFE_DIVIDE(COALESCE(tik.order_refund_amount, 0), COALESCE(tik.sku_subtotal_after_discount, 1)) AS refund_rate,
 		COALESCE(tik.order_refund_amount, 0) / fx.fx_to_usd AS amount_refunded_usd,
@@ -165,19 +164,22 @@ tiktok_data AS(
 		tik.quantity,
 		LOWER(tik.currency) AS currency,
 		tik.sku_subtotal_after_discount / fx.fx_to_usd AS line_item_amount_usd,
-		tik.quantity * tok.cogs / fx.fx_to_usd AS cogs,
-		0 AS cashback,
+		tik.quantity * tok.cogs / fx.fx_to_usd AS cogs,  -- COGS multiplied by quantity
+		0 AS cashback,  -- No cashback on TikTok
 		t.rate AS gst_vat,
-		-- fees entered as a negative number in TikTok Orders google sheet (https://docs.google.com/spreadsheets/d/1_XWOXag-iUo8BHjDh7-5pgwhv3rcFU1xG62TCRIIO6A/edit?gid=571245014#gid=571245014)
+		-- TikTok fees are entered as negative numbers in the source sheet
 		-COALESCE(SAFE_DIVIDE(tik.payment_gateway_fee, COALESCE(tik.sku_subtotal_after_discount, 1)), 0) AS fee_rate,
 		tok.packaging / fx.fx_to_usd AS packaging,
+		-- Customer acquisition date for TikTok users
 		MIN(DATE(tik.created_time)) OVER(PARTITION BY tik.buyer_username) AS acquisition_date
 	FROM google_sheets.tiktok_orders AS tik
+	-- Join product cost data with date range validation
 	LEFT JOIN finance_metrics.tiktok_product_costs AS tok
 		ON tik.sku_id = tok.sku_id
 		AND tik.created_time BETWEEN tok.from_date AND tok.to_date
 	LEFT JOIN ref.fx_rates AS fx
 		ON LOWER(tik.currency) = LOWER(fx.currency)
+	-- Apply Singapore tax rates for TikTok orders
 	LEFT JOIN ref.tax_rate_history AS t
 		ON t.region = 'sg'
 		AND tik.created_time BETWEEN t.from_date AND t.to_date
