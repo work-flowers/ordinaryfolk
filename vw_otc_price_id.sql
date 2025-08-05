@@ -24,7 +24,10 @@ unnested AS (
 )
 
 SELECT 
-  u.*,
+  u.payment_intent_id,
+  u.description,
+  u.price_id,
+  u.quantity,
   px.currency,
   px.unit_amount / fx.fx_to_usd / COALESCE(sub.subunits, 100) AS unit_amount_usd,
   pr.name AS product_name,
