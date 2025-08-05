@@ -24,7 +24,6 @@ unnested AS (
 )
 
 SELECT 
-
   u.payment_intent_id,
   u.description,
   u.price_id,
