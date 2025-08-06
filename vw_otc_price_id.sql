@@ -9,35 +9,15 @@ WITH extracted AS (
 		REGEXP_EXTRACT(description, r'Discount:\s*[-–−]?\$([0-9]+\.[0-9]+)') AS discount_amount_str,
 		REGEXP_EXTRACT(description, r'Shipping:\s*\$([0-9]+\.[0-9]+)') AS shipping_amount_str
   FROM all_stripe.payment_intent
-),
-
-unnested AS (
-	SELECT
-		e.payment_intent_id,
-		e.description,
-		REPLACE(SPLIT(match, ') x ')[OFFSET(0)], '-', '_') AS price_id,
-		SAFE_CAST(SPLIT(match, ') x ')[OFFSET(1)] AS INT64) AS quantity,
-		COALESCE(SAFE_CAST(e.discount_amount_str AS FLOAT64), 0) AS discount_amount,
-		COALESCE(SAFE_CAST(e.shipping_amount_str AS FLOAT64), 0) AS shipping_amount
-	FROM extracted AS e,
-	UNNEST(e.raw_matches) AS match
 )
 
-SELECT 
-	u.payment_intent_id,
-  	u.description,
-	JSON_VALUE(pr.metadata, '$.condition') AS condition,
-	pr.name AS product_name,
-	pr.id AS product_id,
-	u.price_id,
-	u.quantity,
-	px.currency,
-	u.discount_amount AS discount_amount_local,
-	u.shipping_amount AS shipping_amount_local,
-	px.unit_amount AS unit_amount_local
-FROM unnested AS u
-LEFT JOIN all_stripe.price AS px
-	ON u.price_id = LOWER(px.id)
-LEFT JOIN all_stripe.product AS pr
-	ON px.product_id = pr.id
-;
+
+SELECT
+	e.payment_intent_id,
+	e.description,
+	REPLACE(SPLIT(match, ') x ')[OFFSET(0)], '-', '_') AS price_id,
+	SAFE_CAST(SPLIT(match, ') x ')[OFFSET(1)] AS INT64) AS quantity,
+	COALESCE(SAFE_CAST(e.discount_amount_str AS FLOAT64), 0) AS discount_amount_local,
+	COALESCE(SAFE_CAST(e.shipping_amount_str AS FLOAT64), 0) AS shipping_amount_local
+FROM extracted AS e,
+UNNEST(e.raw_matches) AS match

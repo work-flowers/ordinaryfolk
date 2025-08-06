@@ -63,10 +63,10 @@ stripe_data AS (
 		ch.amount_refunded / fx.fx_to_usd / COALESCE(sub.subunits, 100) AS amount_refunded_usd,
 		
 		-- Product identification with fallbacks for different charge types
-		COALESCE(prod.id, tp.product_id, otc.product_id) AS product_id,
-		COALESCE(prod.name, tp.product_name, otc.product_name) AS product_name,
-		COALESCE(px.id, tp.price_id, otc.price_id) AS price_id,
-		COALESCE(JSON_EXTRACT_SCALAR(prod.metadata, '$.condition'), tp.condition, otc.condition) AS condition, -- Medical condition being treated
+		COALESCE(prod.id, tp.product_id) AS product_id,
+		COALESCE(prod.name, tp.product_name) AS product_name,
+		COALESCE(px.id, tp.price_id) AS price_id,
+		COALESCE(JSON_EXTRACT_SCALAR(prod.metadata, '$.condition'), tp.condition) AS condition, -- Medical condition being treated
 		COALESCE(ii.quantity, otc.quantity, 1) AS quantity,
 		ch.currency,
 		
@@ -74,7 +74,7 @@ stripe_data AS (
 		ch.amount / (
 			CASE 
 				WHEN inv.subtotal > 0 THEN inv.subtotal
-				WHEN otc.unit_amount_local > 0 THEN SUM(otc.unit_amount_local) OVER(PARTITION BY ch.payment_intent_id) / otc.unit_amount_local
+				WHEN px.unit_amount> 0 THEN SUM(px.unit_amount) OVER(PARTITION BY ch.payment_intent_id) / px.unit_amount
 				ELSE ch.amount
 				END
 			) * COALESCE(ii.amount,1) / fx.fx_to_usd / COALESCE(sub.subunits, 100) AS line_item_amount_usd,
@@ -93,11 +93,6 @@ stripe_data AS (
 		ON ch.customer_id = cust.id
 	LEFT JOIN patient_brand_stripe_ids AS pbsi
 		ON ch.customer_id = pbsi.stripe_customer_id
-	
-	-- Join OTC (over-the-counter) pricing for non-invoice charges
-	LEFT JOIN all_stripe.otc_price_id AS otc
-		ON ch.payment_intent_id = otc.payment_intent_id
-		AND ch.invoice_id IS NULL -- ONLY for OTC charges which have no invoice_id
 	INNER JOIN all_stripe.balance_transaction AS bt
 		ON ch.balance_transaction_id = bt.id
 	INNER JOIN ref.fx_rates AS fx
@@ -113,8 +108,14 @@ stripe_data AS (
 		ON ch.invoice_id = inv.id
 	LEFT JOIN all_stripe.invoice_line_item AS ii
 		ON ch.invoice_id = ii.invoice_id
+	
+	-- Join OTC (one-time-charge) pricing for non-invoice charges
+	LEFT JOIN all_stripe.otc_price_id AS otc
+		ON ch.payment_intent_id = otc.payment_intent_id
+		AND ch.invoice_id IS NULL -- ONLY for OTC charges which have no invoice_id
+	
 	LEFT JOIN all_stripe.price AS px
-		ON ii.price_id = px.id
+		ON LOWER(COALESCE(ii.price_id, otc.price_id)) = LOWER(px.id) -- need LOWER() because price_ids extracted from otc payment_intent metadata are all lowercase
 	LEFT JOIN all_stripe.product AS prod
 		ON px.product_id = prod.id
 	
