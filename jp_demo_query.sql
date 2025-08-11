@@ -1,8 +1,7 @@
 SELECT DISTINCT 
 	p.sys_id AS patient_id,
-	p.gender,
-	add.state,
-	add.city,
+	INITCAP(p.gender) AS gender,
+	pp.prefecture,
 	REGEXP_REPLACE(
 		REGEXP_REPLACE(add.postal, r'[^0-9]', ''),  -- remove non-digits
   		r'^(\d{3})(\d{4})$',                        -- split into two groups
@@ -18,4 +17,6 @@ INNER JOIN jp_postgres_rds_public.patient AS p
 	ON cm.customer_id = p.stripe_customer_id
 LEFT JOIN jp_postgres_rds_public.address AS add
 	ON p.deliveryaddresssysid = add.sys_id
-GROUP BY 1,2,3,4,5,6,7,8,9
+LEFT JOIN ref.jp_postcode_prefix_prefecture AS pp
+	ON LEFT(REGEXP_REPLACE(add.postal, r'[^0-9]', ''), 3) = pp.postcode_prefix
+GROUP BY 1,2,3,4,5,6,7,8
