@@ -66,13 +66,13 @@ SELECT
     fi.product_id,                                    -- Product ID
     fi.product_name,                                  -- Product name
     fi.condition,                                     -- Product 'condition' metadata
-    fi.first_interval_days,                          -- Original interval count (<= 90 days)
-    ai.current_interval_days,                        -- The upgraded interval count (> 90 days)
+    fi.first_interval_count,                          -- Original interval count (<= 90 days)
+    ai.current_interval_count,                        -- The upgraded interval count (> 90 days)
     DATE_DIFF(ai.subscription_updated, ai.subscription_created, DAY) AS days_elapsed -- Days from start to upgrade
 FROM first_interval AS fi
 LEFT JOIN all_intervals AS ai
     ON fi.subscription_id = ai.subscription_id
     AND fi.product_id = ai.product_id
-    AND ai.current_interval_days > ai.previous_interval_days         -- Only true upgrades
-    AND ai.current_interval_days > 90                                 -- Only upgrades beyond days
+    AND ai.current_interval_count > ai.previous_interval_count
+    AND ai.current_interval_count > 90                                 -- Only upgrades beyond days
     AND DATE_DIFF(ai.subscription_updated, ai.subscription_created, DAY)  <= 90 -- Upgrade must occur within 90 days
