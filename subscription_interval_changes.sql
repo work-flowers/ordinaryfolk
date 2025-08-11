@@ -49,7 +49,7 @@ first_interval AS (
     FROM all_intervals
     WHERE
         1 = 1                       -- Dummy condition for easier commenting/editing
-        AND first_interval_count <= 90   -- Only consider if the original interval count was <= 90 days
+        AND first_interval_count <= 180   -- Only consider if the original interval count was <= 180 days
         AND status = 'active'           -- Only active subscriptions
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY subscription_id, product_id
@@ -74,5 +74,5 @@ LEFT JOIN all_intervals AS ai
     ON fi.subscription_id = ai.subscription_id
     AND fi.product_id = ai.product_id
     AND ai.current_interval_count > ai.previous_interval_count
-    AND ai.current_interval_count > 90                                 -- Only upgrades beyond days
+    AND ai.current_interval_count > 180 -- Only upgrades beyond 180 days
     AND DATE_DIFF(ai.subscription_updated, ai.subscription_created, DAY)  <= 90 -- Upgrade must occur within 90 days
