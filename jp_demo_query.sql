@@ -1,6 +1,10 @@
 SELECT DISTINCT 
 	p.sys_id AS patient_id,
-	REGEXP_REPLACE(add.postal, r'[^0-9]', '') AS postcode,
+	REGEXP_REPLACE(
+		REGEXP_REPLACE(add.postal, r'[^0-9]', ''),  -- remove non-digits
+  		r'^(\d{3})(\d{4})$',                        -- split into two groups
+  		r'\1-\2'                                    -- insert hyphen
+	) AS postcode,
 	DATE_DIFF(CURRENT_DATE(), p.dob, YEAR) AS age,
 	UPPER(p.locale) AS language,
 	cm.brand,
