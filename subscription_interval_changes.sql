@@ -16,7 +16,7 @@ WITH all_intervals_daily AS (
     		WHEN p.interval = 'week' THEN p.interval_count * 7
     		WHEN p.interval = 'month' THEN p.interval_count * 30
     		WHEN p.interval = 'year' THEN p.interval_count * 365
-    		END AS current_interval_days
+    		END AS current_interval_count
     FROM all_stripe.subscription_history AS sh
     JOIN all_stripe.invoice_line_item AS ili 
         ON sh.latest_invoice_id = ili.invoice_id                -- Link subscription to its most recent invoice
@@ -30,16 +30,16 @@ all_intervals AS (
 	SELECT 
 		aid.*,
         -- Previous interval count for this subscription/product pair
-        LAG(aid.current_interval_days) OVER (
+        LAG(aid.current_interval_count) OVER (
             PARTITION BY aid.subscription_id, aid.product_id
             ORDER BY aid._fivetran_start
-        ) AS previous_interval_days,
+        ) AS previous_interval_count,
 
         -- First recorded interval count in the history for this subscription/product
-        FIRST_VALUE(aid.current_interval_days) OVER (
+        FIRST_VALUE(aid.current_interval_count) OVER (
             PARTITION BY aid.subscription_id, aid.product_id
             ORDER BY aid._fivetran_start
-        ) AS first_interval_days
+        ) AS first_interval_count
 	FROM all_intervals_daily AS aid
 ),
 
@@ -49,7 +49,7 @@ first_interval AS (
     FROM all_intervals
     WHERE
         1 = 1                       -- Dummy condition for easier commenting/editing
-        AND first_interval_days <= 90   -- Only consider if the original interval count was <= 90 days
+        AND first_interval_count <= 90   -- Only consider if the original interval count was <= 90 days
         AND status = 'active'           -- Only active subscriptions
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY subscription_id, product_id
