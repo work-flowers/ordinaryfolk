@@ -8,4 +8,5 @@ WITH metadata_keys AS (
 )
 SELECT DISTINCT key
 FROM metadata_keys, UNNEST(keys) as key
-WHERE key IS NOT NULL;
+WHERE key IS NOT NULL
+ORDER BY 1
