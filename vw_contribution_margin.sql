@@ -1,3 +1,6 @@
+-- Drop the existing view if it exists and recreate it
+-- This view consolidates contribution margin data from multiple sales channels
+
 DROP VIEW IF EXISTS finance_metrics.contribution_margin; 
 CREATE VIEW finance_metrics.contribution_margin AS
 
