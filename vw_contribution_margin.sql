@@ -71,14 +71,14 @@ stripe_data AS (
 		ch.currency,
 		
 		-- Calculate line item amount proportionally based on invoice breakdown
-		ch.amount / (
+		SAFE_DIVIDE(
+			ch.amount,
 			CASE 
 				WHEN inv.subtotal > 0 THEN inv.subtotal
-				WHEN px.unit_amount> 0 THEN SUM(px.unit_amount) OVER(PARTITION BY ch.payment_intent_id) / px.unit_amount
-				ELSE ch.amount
+				WHEN px.unit_amount> 0 THEN SUM(px.unit_amount) OVER(PARTITION BY ch.payment_intent_id)
+				ELSE ch.amount 
 				END
-			) * COALESCE(ii.amount,1) / fx.fx_to_usd / COALESCE(sub.subunits, 100) AS line_item_amount_usd,
-		
+		) * COALESCE(ii.amount, px.unit_amount) / fx.fx_to_usd / COALESCE(sub.subunits, 100) AS line_item_amount_usd,		
 		-- Cost of Goods Sold (COGS) - note: teleconsult COGS handled separately in monthly pipeline
 		pc.cogs / fx.fx_to_usd AS cogs,
 		pc.cashback,
