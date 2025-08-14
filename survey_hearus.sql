@@ -15,8 +15,11 @@ SELECT
 		WHEN ev.name LIKE 'PE%' THEN 'PE'
 		WHEN ev.name LIKE 'Weight Loss%' THEN 'Weight Loss'
 		ELSE ev.name 
-		END AS condition, 
-	JSON_VALUE(item, '$.key') AS answer
+		END AS condition,
+	CASE 
+		WHEN  LOWER(JSON_VALUE(item, '$.key')) IN ('facebook', 'instagram', 'facebookinstagram') THEN 'Facebook' 
+		ELSE JSON_VALUE(item, '$.key')
+		END AS answer
 FROM all_postgres.survey AS s
 CROSS JOIN UNNEST(JSON_QUERY_ARRAY(answers)) AS item
 LEFT JOIN first_eval AS fe
@@ -26,4 +29,5 @@ LEFT JOIN all_postgres.evaluation AS ev
 WHERE 
 	1 = 1
 	AND s.type = 'HearUs'
-	AND s.answers IS NOT NULL
+	AND JSON_VALUE(item, '$.key') IS NOT NULL
+	
