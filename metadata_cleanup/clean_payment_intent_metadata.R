@@ -70,10 +70,10 @@ remove_payment_intent_pii <- function(payment_intent_id, region) {
       `Idempotency-Key` = stringr::str_glue("wipe-{payment_intent_id}"),
       `User-Agent` = "work.flowers-pii-wiper/1.0 (+R httr2)"
     ) |>
-    httr2::req_body_form(list(
+    httr2::req_body_form(
       "metadata[customer_email]" = "",  # empty value unsets key
       "metadata[customer_name]"  = ""
-    ))
+      )
   
   out <- perform_with_retries(req)
   
