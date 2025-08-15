@@ -1,5 +1,5 @@
 # stripe_pii_wipe_parallel.R
-# Batch-remove PII metadata from Stripe PaymentIntents across multiple regions/accounts.
+# Batch-remove PII metadata from Stripe Charges across multiple regions/accounts.
 # Parallelised with chunking, idempotency, retries, and gentle pacing.
 
 # --- packages -------------------------------------------------------------
@@ -23,7 +23,7 @@ BQ_AUTH_EMAIL <- "dennis@work.flowers"         # BQ auth identity
 
 # Concurrency knobs
 CONCURRENCY <- 8      # total parallel workers across all regions/chunks (tune 6–10)
-CHUNK_SIZE_PER_TASK <- 200    # how many PaymentIntents each worker handles sequentially
+CHUNK_SIZE_PER_TASK <- 200    # how many Charges each worker handles sequentially
 PACE_SECS <- 0.05   # small pause between calls within a worker (tune to reduce 429s)
 
 # Retry/backoff knobs
@@ -31,7 +31,7 @@ MAX_TRIES <- 6
 BASE_SLEEP_SEC <- 0.5
 
 # Output directory for artefacts
-OUT_DIR <- "stripe_pii_wipe_output_payment_intents"
+OUT_DIR <- "stripe_pii_wipe_output_charge"
 dir.create(OUT_DIR, showWarnings = FALSE)
 
 # --- auth -----------------------------------------------------------------
@@ -41,11 +41,10 @@ bigrquery::bq_auth(BQ_AUTH_EMAIL)
 sql <- "
   SELECT 
     region,
-    id AS payment_intent_id
-  FROM all_stripe.payment_intent
+    id AS charge_id
+  FROM all_stripe.charge
   WHERE 
     COALESCE(JSON_VALUE(metadata, '$.customer_email'), JSON_VALUE(metadata, '$.customer_name')) IS NOT NULL
-  -- LIMIT 5 -- for testing
 "
 
 message("Running BigQuery…")
@@ -53,15 +52,15 @@ job <- bigrquery::bq_project_query(BILLING_PROJECT, sql)
 df_raw <- bigrquery::bq_table_download(
   job, 
   bigint = "character"
-  ) %>%
+) %>%
   tibble::as_tibble()
 
 if (nrow(df_raw) == 0) {
-  message("No PaymentIntents matched. Nothing to do.")
+  message("No Charges matched. Nothing to do.")
   quit(status = 0)
 }
 
-message(glue::glue("Total PaymentIntents to update: {nrow(df_raw)}"))
+message(glue::glue("Total Charges to update: {nrow(df_raw)}"))
 regions <- sort(unique(df_raw$region))
 message("Regions discovered: ", paste(regions, collapse = ", "))
 
@@ -111,13 +110,13 @@ perform_with_retries <- function(req, max_tries = MAX_TRIES, base_sleep = BASE_S
 }
 
 # One-call updater: requires pre-fetched API key
-remove_payment_intent_pii <- function(payment_intent_id, region, api_key) {
-  stopifnot(nzchar(payment_intent_id), nzchar(region), nzchar(api_key))
+remove_charge_pii <- function(charge_id, region, api_key) {
+  stopifnot(nzchar(charge_id), nzchar(region), nzchar(api_key))
   
-  req <- httr2::request(glue::glue("https://api.stripe.com/v1/payment_intents/{payment_intent_id}")) |>
+  req <- httr2::request(glue::glue("https://api.stripe.com/v1/charges/{charge_id}")) |>
     httr2::req_headers(
       Authorization     = paste("Bearer", api_key),
-      `Idempotency-Key` = glue::glue("wipe-{payment_intent_id}"),
+      `Idempotency-Key` = glue::glue("wipe-{charge_id}"),
       `User-Agent`      = "work.flowers-pii-wiper/1.0 (+R httr2)"
     ) |>
     httr2::req_body_form(
@@ -133,13 +132,13 @@ remove_payment_intent_pii <- function(payment_intent_id, region, api_key) {
   }
   
   tibble::tibble(
-    payment_intent_id = payment_intent_id,
+    charge_id = charge_id,
     region = region,
-    http_status       = as.integer(out$status),
-    attempts          = out$attempt,
-    error_class       = out$error %||% NA_character_,
+    http_status = as.integer(out$status),
+    attempts = out$attempt,
+    error_class= out$error %||% NA_character_,
     stripe_error_type = body_json$error$type    %||% NA_character_,
-    stripe_error_msg  = body_json$error$message %||% NA_character_
+    stripe_error_msg = body_json$error$message %||% NA_character_
   )
 }
 
@@ -149,7 +148,7 @@ process_chunk <- function(chunk_df, keys_by_region, pace_secs = PACE_SECS) {
   for (i in seq_len(nrow(chunk_df))) {
     region_i <- chunk_df$region[i]
     key_i    <- keys_by_region[[region_i]]
-    out[[i]] <- remove_payment_intent_pii(chunk_df$payment_intent_id[i], region_i, key_i)
+    out[[i]] <- remove_charge_pii(chunk_df$charge_id[i], region_i, key_i)
     Sys.sleep(pace_secs) # gentle pacing inside each worker
   }
   dplyr::bind_rows(out)
@@ -159,7 +158,7 @@ process_chunk <- function(chunk_df, keys_by_region, pace_secs = PACE_SECS) {
 split_by_region <- split(df_raw %>% arrange(region), df_raw$region)
 
 make_chunks <- function(d, chunk_size = CHUNK_SIZE_PER_TASK) {
-  idx <- split(seq_len(nrow(d)), ceiling(seq_along(d$payment_intent_id) / chunk_size))
+  idx <- split(seq_len(nrow(d)), ceiling(seq_along(d$charge_id) / chunk_size))
   lapply(idx, function(i) d[i, , drop = FALSE])
 }
 
@@ -186,7 +185,7 @@ results_list <- future.apply::future_lapply(
     # Each task is a list: region + df
     res <- process_chunk(task$df, keys_by_region = keys_by_region, pace_secs = PACE_SECS)
     # write intermediate per-chunk result (optional safety)
-    out_path <- file.path(OUT_DIR, glue::glue("chunk_{task$region}_{digest::digest(task$df$payment_intent_id)}.csv"))
+    out_path <- file.path(OUT_DIR, glue::glue("chunk_{task$region}_{digest::digest(task$df$charge_id)}.csv"))
     readr::write_csv(res, out_path, na = "")
     res
   },
