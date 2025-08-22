@@ -49,7 +49,7 @@ first_interval AS (
     FROM all_intervals
     WHERE
         1 = 1                       -- Dummy condition for easier commenting/editing
-        AND first_interval_count <= 180   -- Only consider if the original interval count was <= 180 days
+        AND first_interval_count <= 180   -- Only consider if the original interval count was <= 180 days (6 months)
         AND status = 'active'           -- Only active subscriptions
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY subscription_id, product_id
@@ -57,7 +57,7 @@ first_interval AS (
     ) = 1                             -- Keep only the first chronological record per pair
 )
 
--- Step 3: Main select - find upgrades within 90 days to interval counts greater than 3
+-- Step 3: Main select - find upgrades within 90 days to interval counts greater than 180 days (6 months)
 SELECT 
     fi.country,                                       -- The normalized country/region
     fi.subscription_id,                               -- The subscription ID
