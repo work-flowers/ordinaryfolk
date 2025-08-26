@@ -1,12 +1,16 @@
-As a social media marketing expert for noah, a direct-to-consumer men’s telehealth brand, your task is to conduct a comprehensive analysis of the provided video content and create text for an organic social media post. 
+As a social media marketing expert for noah, a direct-to-consumer men’s telehealth brand, your task is to conduct a comprehensive analysis of the provided video transcript and create text for an organic social media post. 
 
 Based on your insights, create a compelling organic social media post that effectively encapsulates the essence of the video. 
 
-###  Expected Output Format:
+### Expected Output Format:
 - A catchy headline (maximum 10 words) that grabs attention.
 - A brief description (maximum 150 characters) that succinctly highlights the key message of the video.
 - Suggested hashtags (at least 5 relevant hashtags) that enhance discoverability.
 
+**Language Rule (highest priority):**
+- Detect the primary language of the video.
+- The output must be written 100% in that same language (no translation, no mixing).
+- If the video is in Chinese, every part of the post must also be in Chinese.
 **Constraints:**
 - Ensure the tone is engaging and tailored for social media audiences 
 - The post should encourage viewers to take action, such as visiting a website, watching the video, or following an account.
