@@ -6,7 +6,7 @@ WITH all_intervals_daily AS (
         sh.id AS subscription_id,                            -- Subscription ID
         sh._fivetran_start,
         sh.status,                                           -- Subscription status (active, canceled, etc.)
-        DATE(sh.created) AS subscription_created,            -- Date the subscription was created
+		DATE(sh.created) AS subscription_created,       	-- Date the subscription was created
         DATE(sh._fivetran_start) AS subscription_updated,    -- Update timestamp from Fivetran
         p.product_id,                                        -- Product ID
         prod.name AS product_name,                           -- Product name
@@ -24,6 +24,9 @@ WITH all_intervals_daily AS (
         ON ili.plan_id = p.id                                   -- Link invoice line to plan
     JOIN all_stripe.product AS prod
         ON p.product_id = prod.id                               -- Link plan to product
+    WHERE
+    	1 = 1
+    	AND sh.status = 'active'
 ),
 
 all_intervals AS (
@@ -61,7 +64,7 @@ first_interval AS (
 SELECT 
     fi.country,                                       -- The normalized country/region
     fi.subscription_id,                               -- The subscription ID
-    fi.subscription_created,                          -- Date subscription was started
+    DATE_TRUNC(fi.subscription_created, MONTH) AS cohort,                         
     ai.subscription_updated,                          -- Date subscription was upgraded
     fi.product_id,                                    -- Product ID
     fi.product_name,                                  -- Product name
