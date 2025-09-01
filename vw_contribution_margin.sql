@@ -20,20 +20,6 @@ patient_brand_stripe_ids AS (
 	FROM all_postgres.patient
 ),
 
--- CTE to identify teleconsultation prices and products
--- Filters products with 'tele' in the name to separate teleconsult services
-tel_price AS (
-
-		SELECT
-			px.id AS price_id,
-			px.product_id,
-			pr.name AS product_name,
-			COALESCE(JSON_VALUE(pr.metadata, '$.condition'), 'Services') AS condition -- Extract condition from product metadata, default to 'Services' if not found
-		FROM all_stripe.product AS pr
-		INNER JOIN all_stripe.price AS px
-			ON pr.id = px.product_id
-		WHERE LOWER(pr.name) LIKE '%tele%' -- Filter for teleconsultation products
-),
 
 -- Main CTE for Stripe payment data
 -- Processes all Stripe charges and associated invoice/subscription data
@@ -63,10 +49,10 @@ stripe_data AS (
 		ch.amount_refunded / fx.fx_to_usd / COALESCE(sub.subunits, 100) AS amount_refunded_usd,
 		
 		-- Product identification with fallbacks for different charge types
-		COALESCE(prod.id, tp.product_id) AS product_id,
-		COALESCE(prod.name, tp.product_name) AS product_name,
-		COALESCE(px.id, tp.price_id) AS price_id,
-		COALESCE(JSON_EXTRACT_SCALAR(prod.metadata, '$.condition'), tp.condition) AS condition, -- Medical condition being treated
+		prod.id AS product_id,
+		prod.name AS product_name,
+		px.id AS price_id,
+		JSON_VALUE(prod.metadata, '$.condition') AS condition, -- Medical condition being treated
 		COALESCE(ii.quantity, otc.quantity, 1) AS quantity,
 		ch.currency,
 		
@@ -131,8 +117,6 @@ stripe_data AS (
 	LEFT JOIN all_stripe.product_cost AS pc
 		ON px.id = pc.price_id
 		AND DATE(ch.created) BETWEEN pc.from_date AND pc.to_date
-	LEFT JOIN tel_price AS tp
-		ON COALESCE(JSON_EXTRACT_SCALAR(pi.metadata, '$.paymentIntentPriceId'), JSON_EXTRACT_SCALAR(pi.metadata, '$.stripePriceIds')) = tp.price_id
 	
 	-- Join tax data with date range validation
 	LEFT JOIN ref.tax_rate_history AS t
