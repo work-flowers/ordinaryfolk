@@ -115,7 +115,15 @@ stripe_data AS (
 		AND ch.invoice_id IS NULL -- ONLY for OTC charges which have no invoice_id
 	
 	LEFT JOIN all_stripe.price AS px
-		ON LOWER(COALESCE(ii.price_id, otc.price_id)) = LOWER(px.id) -- need LOWER() because price_ids extracted from otc payment_intent metadata are all lowercase
+		ON LOWER(
+			COALESCE(
+				ii.price_id, 
+				otc.price_id, 
+				JSON_VALUE(pi.metadata, '$.priceIds'),
+				JSON_VALUE(pi.metadata, '$.stripePriceIds'),
+				JSON_VALUE(pi.metadata, '$.paymentIntentPriceId')
+			)
+		) = LOWER(px.id) -- need LOWER() because price_ids extracted from otc payment_intent metadata are all lowercase
 	LEFT JOIN all_stripe.product AS prod
 		ON px.product_id = prod.id
 	
