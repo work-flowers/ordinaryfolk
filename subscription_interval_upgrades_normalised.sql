@@ -1,5 +1,5 @@
 
--- Step 1: Create a Common Table Expression (CTE) called 'all_intervals'
+-- Create a Common Table Expression (CTE) called 'all_intervals'
 WITH all_intervals_daily AS (
     SELECT DISTINCT
         UPPER(sh.region) AS country,  
@@ -57,7 +57,7 @@ first_subscription_per_customer AS (
 	) = 1
 ),
 
--- Step 2: Find the first qualifying active subscription interval for each subscription-product pair
+-- Find the first qualifying active subscription interval for each subscription-product pair
 first_interval AS (
     SELECT ai.*
     FROM all_intervals AS ai
@@ -73,7 +73,7 @@ first_interval AS (
     ) = 1                             -- Keep only the first chronological record per pair
 )
 
--- Step 3: Main select - find upgrades within 90 days to interval counts greater than 180 days (6 months)
+-- Main select - find upgrades within 90 days to interval counts greater than 180 days (6 months)
 SELECT 
     fi.country,                                       -- The normalized country/region
     fi.subscription_id,                               -- The subscription ID
