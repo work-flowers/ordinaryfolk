@@ -2,7 +2,8 @@
 -- Step 1: Create a Common Table Expression (CTE) called 'all_intervals'
 WITH all_intervals_daily AS (
     SELECT DISTINCT
-        UPPER(sh.region) AS country,                         -- Normalize country/region to uppercase
+        UPPER(sh.region) AS country,  
+        sh.customer_id,                       -- Normalize country/region to uppercase
         sh.id AS subscription_id,                            -- Subscription ID
         sh._fivetran_start,
         sh.status,                                           -- Subscription status (active, canceled, etc.)
@@ -46,17 +47,29 @@ all_intervals AS (
 	FROM all_intervals_daily AS aid
 ),
 
+-- Add a CTE to identify first subscription per customer
+first_subscription_per_customer AS (
+    SELECT subscription_id
+    FROM all_intervals_daily
+    QUALIFY ROW_NUMBER() OVER(
+    	PARTITION BY customer_id
+    	ORDER BY subscription_created ASC
+	) = 1
+),
+
 -- Step 2: Find the first qualifying active subscription interval for each subscription-product pair
 first_interval AS (
-    SELECT *
-    FROM all_intervals
+    SELECT ai.*
+    FROM all_intervals AS ai
+    INNER JOIN first_subscription_per_customer AS fs
+    	ON ai.subscription_id = fs.subscription_id
     WHERE
         1 = 1                       -- Dummy condition for easier commenting/editing
-        AND first_interval_count <= 180   -- Only consider if the original interval count was <= 180 days (6 months)
-        AND status = 'active'           -- Only active subscriptions
+        AND ai.first_interval_count <= 180   -- Only consider if the original interval count was <= 180 days (6 months)
+        AND ai.status = 'active'           -- Only active subscriptions
     QUALIFY ROW_NUMBER() OVER (
-        PARTITION BY subscription_id, product_id
-        ORDER BY subscription_updated
+        PARTITION BY ai.subscription_id, ai.product_id
+        ORDER BY ai.subscription_updated
     ) = 1                             -- Keep only the first chronological record per pair
 )
 
