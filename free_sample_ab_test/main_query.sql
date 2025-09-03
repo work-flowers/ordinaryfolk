@@ -13,7 +13,7 @@ SELECT
 	cm.purchase_type,
 	cm.new_existing,
 	cm.purchase_date,
-	cm.brand,
+	COALESCE(cm.brand, 'N/A') AS brand,
 	cm.condition,
 	cm.product_name,
 	cm.product_id,
