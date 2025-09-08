@@ -108,6 +108,7 @@ SELECT
 	aswm.subscription_id,
 	aswm.customer_id,
 	cal.obs_date,
+	aswm.status,
 	aswm.created_at,
 	-- for subs that have been canceled, take the date of the last successful payment as the ended_at date
 	-- smooths out cliff caused by one-time cancellation of large number of past-due subs in Jul-24
