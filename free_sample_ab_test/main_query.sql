@@ -29,3 +29,4 @@ INNER JOIN test_group AS tg
 WHERE
 	1 = 1
 	AND cm.purchase_date >= '2025-01-01'
+	AND cm.condition IS NULL OR cm.condition <> 'Services'
