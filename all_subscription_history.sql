@@ -5,21 +5,24 @@ DROP VIEW IF EXISTS `all_stripe.subscription_metrics`;
 CREATE VIEW `all_stripe.subscription_metrics` AS
 
 WITH 
--- 1) Use a window function to get only the *latest* row per subscription
-sub_active_slices AS (
+-- Get all subscription state changes over time (preserve history)
+subscription_history AS (
 	SELECT
 		region,
 		id AS subscription_id,
 		customer_id,
 		status,
 		DATE(created) AS created_at,
-		DATE(COALESCE(ended_at, _fivetran_end)) AS ended_at
+		DATE(COALESCE(ended_at)) AS ended_at,
+		DATE(_fivetran_start) AS valid_from,
+		DATE(_fivetran_end) AS valid_to
 	FROM all_stripe.subscription_history
-	QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY _fivetran_end DESC) = 1
+	-- control for cases where there are multiple state changes within the same day
+	QUALIFY ROW_NUMBER() OVER (PARTITION BY id, DATE(_fivetran_end) ORDER BY _fivetran_end DESC) = 1
 ),
 
--- 2) Calculate "MRR" per subscription_id, grouping by currency
-sub_mrr AS (
+-- Calculate MRR per subscription_id with product and condition breakout
+mrr_by_sub AS (
 	SELECT
 		si.subscription_id,
 		pl.currency,
@@ -48,62 +51,44 @@ sub_mrr AS (
 		si.quantity > 0
 ),
 
--- 3) Attach MRR + currency to each subscription slice
-active_slices_with_mrr AS (
-	SELECT
-		sas.region,
-		sas.subscription_id,
-		sas.customer_id,
-		sas.status,
-		sas.created_at,
-		sas.ended_at,
-		COALESCE(sm.subscription_mrr, 0) AS mrr_local,
-		COALESCE(sm.subscription_mrr, 0) / fx.fx_to_usd AS mrr_usd,
-		sm.currency,
-		sm.plan_id,
-		sm.interval,
-		sm.interval_count,
-		sm.product_id,
-		sm.n_boxes,
-		sm.product_name,
-		sm.condition
-	FROM sub_active_slices AS sas
-	LEFT JOIN sub_mrr AS sm
-		ON sas.subscription_id = sm.subscription_id
-	LEFT JOIN ref.fx_rates AS fx
-		ON sm.currency = fx.currency
-		
-),
-
--- 4) Build a monthly calendar from 2020-08-01 to current date
+-- Date range calendar
 calendar AS (
 	SELECT
 		obs_date
-	FROM UNNEST(
-		GENERATE_DATE_ARRAY(
-			DATE '2020-08-01',
-			CURRENT_DATE(),
-			INTERVAL 1 DAY
-		)
-	) AS obs_date
+	FROM UNNEST(GENERATE_DATE_ARRAY(DATE '2020-08-01', CURRENT_DATE(), INTERVAL 1 DAY)) AS obs_date
 ),
 
--- 5) Last successful charge date for canceled subscriptions
+-- Point-in-time subscription states
+subscription_point_in_time AS (
+	SELECT
+		cal.obs_date,
+		sh.region,
+		sh.subscription_id,
+		sh.customer_id,
+		sh.status,
+		sh.created_at,
+		sh.ended_at
+	FROM calendar AS cal
+	INNER JOIN subscription_history AS sh
+		ON cal.obs_date >= sh.valid_from
+		AND cal.obs_date < COALESCE(sh.valid_to, '9999-12-31')		
+),
+
+
+-- Last successful charge date for canceled subscriptions
 last_payment AS (
 	SELECT
-		sas.subscription_id,
+		i.subscription_id,
 		CAST(MAX(c.created) AS DATE) AS last_paid
-	FROM sub_active_slices AS sas
-	JOIN all_stripe.invoice AS i
-		ON sas.subscription_id = i.subscription_id 
+	FROM all_stripe.invoice AS i
 	JOIN all_stripe.charge AS c
 		ON i.id = c.invoice_id
 		AND c.status = 'succeeded'
 	GROUP BY 1
 ),
 
--- 6) first purchase date per customer_id
-first_purchase AS (
+-- First purchase date per customer_id
+customer_first_purchase AS (
 	SELECT
 		customer_id,
 		MIN(DATE(created)) AS first_purchase_date
@@ -115,44 +100,54 @@ first_purchase AS (
 
 -- 7) Final SELECT
 SELECT
-	aswm.region,
-	aswm.subscription_id,
-	aswm.customer_id,
+	spit.region,
+	spit.subscription_id,
+	spit.customer_id,
 	CASE 
-		WHEN fp.first_purchase_date < aswm.created_at THEN 'Existing'
+		WHEN cfp.first_purchase_date < spit.created_at THEN 'Existing'
 		ELSE 'New'
-		END AS new_existing,
-	cal.obs_date,
-	aswm.status,
-	aswm.created_at,
-	-- for subs that have been canceled, take the date of the last successful payment as the ended_at date
-	-- smooths out cliff caused by one-time cancellation of large number of past-due subs in Jul-24
-	COALESCE(lp.last_paid, aswm.ended_at) AS ended_at,
-	aswm.currency,
-	aswm.plan_id,
-	aswm.interval,
-	aswm.interval_count,
-	aswm.product_id,
-	aswm.product_name,
-	aswm.n_boxes,
-	aswm.condition,
-	CASE 
-		WHEN COALESCE(lp.last_paid, aswm.ended_at) >= cal.obs_date THEN aswm.mrr_local
-		ELSE 0 
-		END AS mrr_local,
-	CASE 
-		WHEN COALESCE(lp.last_paid, aswm.ended_at) >= cal.obs_date THEN aswm.mrr_usd
-		ELSE 0 
-		END AS mrr_usd
-FROM active_slices_with_mrr AS aswm
--- INNER JOIN to only include subscriptions that have had at least one succesful charge
-INNER JOIN last_payment AS success
-	ON aswm.subscription_id = success.subscription_id
+  		END AS new_existing,
+	spit.obs_date,
+	spit.status,
+	spit.created_at,
+	COALESCE(lp.last_paid, spit.ended_at) AS ended_at,
+	sm.currency,
+	sm.plan_id,
+	sm.interval,
+	sm.product_id,
+	sm.product_name,
+	sm.n_boxes,
+	sm.condition,
+  -- MRR based on status at observation date
+  	CASE 
+    	WHEN spit.status IN ('active', 'trialing') 
+    	THEN COALESCE(sm.subscription_mrr, 0)
+    	ELSE 0 
+  		END AS mrr_local,
+  	CASE 
+    	WHEN spit.status IN ('active', 'trialing') 
+    	THEN COALESCE(sm.subscription_mrr, 0) / COALESCE(fx.fx_to_usd, 1)
+    	ELSE 0 
+  		END AS mrr_usd
+FROM subscription_point_in_time AS spit
+LEFT JOIN mrr_by_sub AS sm 
+	ON spit.subscription_id = sm.subscription_id
+LEFT JOIN ref.fx_rates fx ON 
+	sm.currency = fx.currency
+-- INNER JOIN to exclude subs with no successful charges
+LEFT JOIN last_payment AS success
+	ON spit.subscription_id = success.subscription_id
+-- For canceled subs, we want to take the date of the last successful payment as the cancellation date
 LEFT JOIN last_payment AS lp
-	ON aswm.subscription_id = lp.subscription_id
-	AND aswm.status = 'canceled'
-INNER JOIN calendar AS cal
-	ON aswm.created_at <= cal.obs_date
-	AND COALESCE(lp.last_paid, aswm.ended_at) >= DATE_ADD(cal.obs_date, INTERVAL -1 DAY)
-LEFT JOIN first_purchase AS fp
-	ON aswm.customer_id = fp.customer_id
+	ON spit.subscription_id = lp.subscription_id 
+	AND spit.status = 'canceled'
+LEFT JOIN customer_first_purchase AS cfp 
+	ON spit.customer_id = cfp.customer_id
+WHERE 
+  -- Only include dates within subscription lifecycle
+	1 = 1 
+  	AND spit.obs_date >= spit.created_at
+	AND (
+		spit.status = 'active' 
+    	OR spit.obs_date = DATE_ADD(COALESCE(lp.last_paid, spit.ended_at), INTERVAL 1 DAY)
+  	)
