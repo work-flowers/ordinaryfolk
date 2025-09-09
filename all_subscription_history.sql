@@ -114,6 +114,7 @@ SELECT
 	sm.currency,
 	sm.plan_id,
 	sm.interval,
+	sm.interval_count,
 	sm.product_id,
 	sm.product_name,
 	sm.n_boxes,
