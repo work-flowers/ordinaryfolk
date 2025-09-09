@@ -119,7 +119,7 @@ SELECT
 	aswm.subscription_id,
 	aswm.customer_id,
 	CASE 
-		WHEN fp.first_purchase_date <= aswm.created_at THEN 'Existing'
+		WHEN fp.first_purchase_date < aswm.created_at THEN 'Existing'
 		ELSE 'New'
 		END AS new_existing,
 	cal.obs_date,
