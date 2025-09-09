@@ -100,13 +100,27 @@ last_payment AS (
 		ON i.id = c.invoice_id
 		AND c.status = 'succeeded'
 	GROUP BY 1
+),
+
+-- 6) first purchase date per customer_id
+first_purchase AS (
+	SELECT
+		customer_id,
+		MIN(DATE(created)) AS first_purchase_date
+	FROM all_stripe.charge
+	WHERE status = 'succeeded'
+
 )
 
--- 6) Final SELECT
+-- 7) Final SELECT
 SELECT
 	aswm.region,
 	aswm.subscription_id,
 	aswm.customer_id,
+	CASE 
+		WHEN fp.first_purchase_date <= aswm.created THEN 'Existing'
+		ELSE 'New'
+		END AS new_existing,
 	cal.obs_date,
 	aswm.status,
 	aswm.created_at,
@@ -139,3 +153,5 @@ LEFT JOIN last_payment AS lp
 INNER JOIN calendar AS cal
 	ON aswm.created_at <= cal.obs_date
 	AND COALESCE(lp.last_paid, aswm.ended_at) >= DATE_ADD(cal.obs_date, INTERVAL -1 DAY)
+LEFT JOIN first_purchase AS fp
+	ON aswm.customer_id = fp.customer_id
