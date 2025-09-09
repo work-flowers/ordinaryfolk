@@ -109,6 +109,7 @@ first_purchase AS (
 		MIN(DATE(created)) AS first_purchase_date
 	FROM all_stripe.charge
 	WHERE status = 'succeeded'
+	GROUP BY 1
 
 )
 
