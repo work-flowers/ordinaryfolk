@@ -17,12 +17,6 @@ subscription_history AS (
         DATE(_fivetran_start) AS valid_from,
         DATE(_fivetran_end) AS valid_to
     FROM all_stripe.subscription_history
-    -- only include subs that were active at some point
-    WHERE id IN (
-    	SELECT DISTINCT id
-    	FROM all_stripe.subscription_history
-    	WHERE status = 'active'
-	)
     -- control for cases where there are multiple state changes within the same day
     QUALIFY ROW_NUMBER() OVER (PARTITION BY id, DATE(_fivetran_end) ORDER BY _fivetran_end DESC) = 1
 ),
@@ -93,11 +87,6 @@ subscription_final_state AS (
         DATE(_fivetran_start) AS valid_from,
         DATE(_fivetran_end) AS valid_to
     FROM all_stripe.subscription_history AS sh
-    WHERE id IN (
-    	SELECT DISTINCT id
-    	FROM all_stripe.subscription_history
-    	WHERE status = 'active'
-	)
     -- control for cases where there are multiple state changes within the same day
     QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY _fivetran_end DESC) = 1
 ),
@@ -116,7 +105,7 @@ subscription_point_in_time AS (
     FROM calendar AS cal
     INNER JOIN subscription_history AS sh
         ON cal.obs_date >= sh.valid_from
-        AND cal.obs_date <= sh.valid_to
+        AND cal.obs_date < sh.valid_to
     INNER JOIN subscription_final_state AS sfs
     	ON sh.subscription_id = sfs.subscription_id
 	LEFT JOIN last_payment AS lp
@@ -125,7 +114,7 @@ subscription_point_in_time AS (
 	WHERE 
 		1 = 1
 		AND sh.status IN ('active', 'past_due')
-		AND cal.obs_date <= COALESCE(lp.last_paid, sfs.ended_at)
+		AND cal.obs_date <= CURRENT_DATE
 
     UNION ALL
 
