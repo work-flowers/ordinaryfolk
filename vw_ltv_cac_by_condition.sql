@@ -6,10 +6,10 @@ WITH all_mrr AS (
 		region,
 		obs_date,
 		condition,
-		SUM(CASE WHEN lifecyle = 'New' THEN n_subscriptions ELSE 0 END) AS n_new_subscriptions,
+		SUM(CASE WHEN lifecycle = 'New' THEN n_subscriptions ELSE 0 END) AS n_new_subscriptions,
 		SUM(current_mrr) AS current_mrr,
 		SUM(n_subscriptions) AS current_n_subscriptions
-	FROM finance_metrics.subscription_lifecyle_monthly
+	FROM finance_metrics.subscription_lifecycle_monthly
 	WHERE 
 		current_mrr > 0
 	GROUP BY 1,2,3
@@ -22,8 +22,8 @@ churn_info AS (
 		condition,
 		n_subscriptions AS n_churned_subscriptions,
 		SUM(lagged_mrr) AS churned_mrr		
-	FROM finance_metrics.subscription_lifecyle_monthly
-	WHERE lifecyle = 'Churn'
+	FROM finance_metrics.subscription_lifecycle_monthly
+	WHERE lifecycle = 'Churn'
 	GROUP BY 1,2,3,4
 ),
 
@@ -32,10 +32,11 @@ gm_inputs AS (
 		country,
 		date,
 		condition,
-		gross_revenue - refunds - tax_paid_usd AS net_revenue,
-		cogs,
-		marketing_cost
+		SUM(net_revenue) AS net_revenue,
+		SUM(cogs) AS cogs,
+		SUM(marketing_cost) AS marketing_cost
 	FROM finance_metrics.monthly_contribution_margin
+	GROUP BY 1,2,3
 )
 
 SELECT	
