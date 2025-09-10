@@ -92,50 +92,68 @@ subscription_final_state AS (
 ),
 
 -- Point-in-time subscription states INCLUDING the day after cancellation
+-- Point-in-time subscription states INCLUDING the day after cancellation (no calendar, no UNION)
 subscription_point_in_time AS (
-    -- Regular point-in-time records
+  WITH j AS (
     SELECT
-        cal.obs_date,
-        sh.region,
-        sh.subscription_id,
-        sh.customer_id,
-        sh.status,
-        sh.created_at,
-        COALESCE(lp.last_paid, sfs.ended_at) AS ended_at
-    FROM calendar AS cal
-    INNER JOIN subscription_history AS sh
-        ON cal.obs_date >= sh.valid_from
-        AND cal.obs_date < sh.valid_to
-    INNER JOIN subscription_final_state AS sfs
-    	ON sh.subscription_id = sfs.subscription_id
-	LEFT JOIN last_payment AS lp
-		ON sfs.subscription_id = lp.subscription_id
-        AND sfs.status = 'canceled'
-	WHERE 
-		1 = 1
-		AND sh.status IN ('active', 'past_due')
-		AND cal.obs_date <= CURRENT_DATE
-
-    UNION ALL
-
-    -- Add the "day after" record for ended subscriptions
-    SELECT
-        DATE_ADD(COALESCE(lp.last_paid, sfs.ended_at), INTERVAL 1 DAY) AS obs_date,
-        sfs.region,
-        sfs.subscription_id,
-        sfs.customer_id,
-        sfs.status,
-        sfs.created_at,
-        COALESCE(lp.last_paid, sfs.ended_at) AS ended_at
-    FROM subscription_final_state AS sfs
+      sh.region,
+      sh.subscription_id,
+      sh.customer_id,
+      sh.status AS slice_status,
+      sh.created_at,
+      sh.valid_from,
+      sh.valid_to,
+      sfs.status AS final_status,
+      COALESCE(lp.last_paid, sfs.ended_at) AS final_end,
+      ROW_NUMBER() OVER (
+        PARTITION BY sh.subscription_id
+        ORDER BY sh.valid_to DESC NULLS LAST
+      ) AS rn
+    FROM subscription_history AS sh
+    JOIN subscription_final_state AS sfs
+      ON sh.subscription_id = sfs.subscription_id
     LEFT JOIN last_payment AS lp
-        ON sfs.subscription_id = lp.subscription_id
-        AND sfs.status = 'canceled'
-    WHERE sfs.status IN ('canceled', 'ended', 'unpaid')
-        AND COALESCE(lp.last_paid, sfs.ended_at) IS NOT NULL
-        AND DATE_ADD(COALESCE(lp.last_paid, sfs.ended_at), INTERVAL 1 DAY) <= CURRENT_DATE()
-),
+      ON sfs.subscription_id = lp.subscription_id
+     AND sfs.status = 'canceled'
+    WHERE sh.status IN ('active','past_due','trialing')
+  )
 
+  SELECT
+    obs_date,
+    j.region,
+    j.subscription_id,
+    j.customer_id,
+    CASE
+      WHEN j.final_end IS NOT NULL
+       AND j.rn = 1
+       AND j.final_status IN ('canceled','ended','unpaid')
+       AND obs_date = DATE_ADD(j.final_end, INTERVAL 1 DAY)
+      THEN j.final_status
+      ELSE j.slice_status
+    END AS status,
+    j.created_at,
+    j.final_end AS ended_at
+  FROM j
+  CROSS JOIN UNNEST(
+    ARRAY_CONCAT(
+      GENERATE_DATE_ARRAY(
+        j.valid_from,
+        LEAST(DATE_SUB(j.valid_to, INTERVAL 1 DAY), CURRENT_DATE()),
+        INTERVAL 1 DAY
+      ),
+      IF(
+        j.rn = 1
+        AND j.final_status IN ('canceled','ended','unpaid')
+        AND j.final_end IS NOT NULL
+        AND DATE_ADD(j.final_end, INTERVAL 1 DAY) <= CURRENT_DATE(),
+        [DATE_ADD(j.final_end, INTERVAL 1 DAY)],
+        []
+      )
+    )
+  ) AS obs_date
+  WHERE obs_date >= j.created_at
+    AND obs_date <= CURRENT_DATE()
+),
 -- First purchase date per customer_id
 customer_first_purchase AS (
     SELECT
@@ -183,9 +201,6 @@ LEFT JOIN mrr_by_sub AS sm
     ON spit.subscription_id = sm.subscription_id
 LEFT JOIN ref.fx_rates fx
     ON sm.currency = fx.currency
-LEFT JOIN last_payment AS lp
-    ON spit.subscription_id = lp.subscription_id
-    AND spit.status = 'canceled'
 LEFT JOIN customer_first_purchase AS cfp
     ON spit.customer_id = cfp.customer_id
 WHERE
