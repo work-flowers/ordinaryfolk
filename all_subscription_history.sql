@@ -162,6 +162,14 @@ customer_first_purchase AS (
     FROM all_stripe.charge
     WHERE status = 'succeeded'
     GROUP BY 1
+),
+
+# mapping of paitent to brand
+patient_brand_stripe_ids AS (
+	SELECT DISTINCT
+		stripe_customer_id,
+		INITCAP(from_platform_env) AS brand
+	FROM all_postgres.patient
 )
 
 -- Final SELECT
@@ -203,5 +211,7 @@ LEFT JOIN ref.fx_rates fx
     ON sm.currency = fx.currency
 LEFT JOIN customer_first_purchase AS cfp
     ON spit.customer_id = cfp.customer_id
+LEFT JOIN patient_brand_stripe_ids AS pbsi
+	ON spit.customer_id = pbsi.stripe_customer_id
 WHERE
     spit.obs_date >= spit.created_at
