@@ -181,6 +181,7 @@ SELECT
         WHEN cfp.first_purchase_date < spit.created_at THEN 'Existing'
         ELSE 'New'
     END AS new_existing,
+    pbsi.brand,
     spit.obs_date,
     spit.status,
     spit.created_at,
