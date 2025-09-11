@@ -5,10 +5,10 @@ WITH all_mrr AS (
 	SELECT
 		region,
 		obs_date,
-		SUM(CASE WHEN lifecyle = 'New' THEN n_customers ELSE 0 END) AS n_new_customers,
+		SUM(CASE WHEN lifecycle = 'New' THEN n_customers ELSE 0 END) AS n_new_customers,
 		SUM(current_mrr) AS current_mrr,
 		SUM(n_customers) AS current_n_customers
-	FROM finance_metrics.customer_lifecyle_monthly
+	FROM finance_metrics.customer_lifecycle_monthly
 	WHERE 
 		current_mrr > 0
 	GROUP BY 1,2
@@ -20,8 +20,8 @@ churn_info AS (
 		obs_date,
 		SUM(n_customers) AS n_churned_customers,
 		SUM(lagged_mrr) AS churned_mrr		
-	FROM finance_metrics.customer_lifecyle_monthly
-	WHERE lifecyle = 'Churn'
+	FROM finance_metrics.customer_lifecycle_monthly
+	WHERE lifecycle = 'Churn'
 	GROUP BY 1,2
 ),
 
