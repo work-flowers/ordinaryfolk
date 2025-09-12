@@ -71,7 +71,8 @@ stripe_data AS (
 		t.rate AS gst_vat, -- Tax rate (GST/VAT) applicable, in % terms
 		COALESCE(bt.fee / bt.amount, 0) AS fee_rate,
 		pc.packaging / fx.fx_to_usd AS packaging,
-		MIN(DATE(ch.created)) OVER(PARTITION BY ch.customer_id) AS acquisition_date -- Customer acquisition date (first purchase date for this customer)
+		MIN(DATE(ch.created)) OVER(PARTITION BY ch.customer_id) AS acquisition_date, -- Customer acquisition date (first purchase date for this customer)
+		MAX(ch._fivetran_synced) OVER() AS as_of
 	FROM all_stripe.charge AS ch
 	LEFT JOIN all_stripe.payment_intent AS pi
 		ON ch.payment_intent_id = pi.id
@@ -164,7 +165,8 @@ tiktok_data AS(
 		-COALESCE(SAFE_DIVIDE(tik.payment_gateway_fee, COALESCE(tik.sku_subtotal_after_discount, 1)), 0) AS fee_rate,
 		tok.packaging / fx.fx_to_usd AS packaging,
 		-- Customer acquisition date for TikTok users
-		MIN(DATE(tik.created_time)) OVER(PARTITION BY tik.buyer_username) AS acquisition_date
+		MIN(DATE(tik.created_time)) OVER(PARTITION BY tik.buyer_username) AS acquisition_date,
+		MAX(tik._fivetran_synced) OVER() AS as_of
 	FROM google_sheets.tiktok_orders AS tik
 	-- Join product cost data with date range validation
 	LEFT JOIN finance_metrics.tiktok_product_costs AS tok
@@ -202,7 +204,8 @@ lazada_data AS (
 					'Orders-Marketing Fees',
 					'Other Services-Marketing Fees'
 				) THEN -o.amount / fx.fx_to_usd ELSE 0 END
-		) AS fees
+		) AS fees,
+		MAX(o._fivetran_synced) AS as_of
 	FROM google_sheets.lazada_orders AS o
 	LEFT JOIN ref.fx_rates AS fx
 		ON LOWER(o.currency) = fx.currency
@@ -251,7 +254,8 @@ shopee_data AS (
 		sc.packaging / fx.fx_to_usd AS packaging,
 		
 		-- Customer acquisition date for Shopee users
-		MIN(DATE(so.payout_completed_date)) OVER(PARTITION BY so.username_buyer_) AS acquisition_date
+		MIN(DATE(so.payout_completed_date)) OVER(PARTITION BY so.username_buyer_) AS acquisition_date,
+		MAX(so._fivetran_synced) OVER() AS as_of
 	FROM google_sheets.shopee_orders AS so
 	LEFT JOIN ref.fx_rates AS fx
 		ON LOWER(so.currency) = fx.currency
@@ -310,7 +314,8 @@ sg_cod_data AS (
 		0 AS fee_rate,  -- No payment processing fees for COD
 		c.packaging_cost / fx.fx_to_usd AS packaging,
 		-- Customer acquisition date based on email
-		MIN(o.date) OVER(PARTITION BY o.email) AS acquisition_date
+		MIN(o.date) OVER(PARTITION BY o.email) AS acquisition_date,
+		MAX(cttp._fivetran_synced) OVER() AS as_of
 	FROM finance_metrics.cod_sg_orders_all AS o
 	LEFT JOIN ref.fx_rates AS fx
 		ON o.currency = fx.currency
@@ -365,7 +370,8 @@ hk_cod_data AS (
 		-- HK COD has payment gateway fees unlike SG COD
 		SAFE_DIVIDE(o.payment_gateway_fees, o.purchase_amount) AS fee_rate,
 		c.packaging_cost / fx.fx_to_usd AS packaging,
-		MIN(o.date) OVER(PARTITION BY o.email) AS acquisition_date
+		MIN(o.date) OVER(PARTITION BY o.email) AS acquisition_date,
+		MAX(prod._fivetran_synced) OVER() AS as_of
 	FROM finance_metrics.cod_hk_orders_all AS o
 	LEFT JOIN ref.fx_rates AS fx
 		ON o.currency = fx.currency
@@ -436,7 +442,8 @@ atome_final AS (
 		-SUM(am.sponsored_voucher_amount + mdr_fee + flat_fee) / SUM(GREATEST(am.transaction_amount, 0) / fx.fx_to_usd) AS fee_rate,
 		pc.packaging,
 		-- Customer acquisition date based on patient ID
-		MIN(aod.order_date) OVER (PARTITION BY o.patient_id) AS acquisition_date
+		MIN(aod.order_date) OVER (PARTITION BY o.patient_id) AS acquisition_date,
+		MAX(am._fivetran_synced) AS as_of
 	FROM google_sheets.atome_manual AS am
 	INNER JOIN atome_order_dates AS aod
 		ON am.atome_order_id = aod.atome_order_id
@@ -520,7 +527,8 @@ unioned_data AS (
 		t.rate AS gst_vat,
 		fees / line_item_amount_usd AS fee_rate,  -- Calculate fee percentage
 		packaging,
-		CAST(NULL AS DATE) AS acquisition_date  -- Not tracked for Lazada b/c we don't have any unique customer identifier
+		CAST(NULL AS DATE) AS acquisition_date,  -- Not tracked for Lazada b/c we don't have any unique customer identifier
+		as_of
 	FROM lazada_data
 	-- Apply Singapore tax rates to Lazada data
 	LEFT JOIN ref.tax_rate_history AS t
