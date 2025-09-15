@@ -19,17 +19,18 @@ prior_pt AS (
     s.region,
     s.mrr_usd AS prior_mrr
   FROM all_stripe.subscription_metrics s
-  WHERE s.obs_date = DATE_SUB(CURRENT_DATE(), INTERVAL 1 MONTH)
+  WHERE s.obs_date = DATE_SUB(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 1 DAY)
 ),
 
 -- acquisition date up to today (first time mrr > 0 on or before today)
 acq AS (
   SELECT
     s.customer_id,
+    s.region,
     MIN(s.obs_date) AS acq_date
   FROM all_stripe.subscription_metrics s
   WHERE s.mrr_usd > 0
-  GROUP BY 1
+  GROUP BY 1,2
 ),
 
 combined AS (
@@ -45,13 +46,14 @@ combined AS (
   	ON p.customer_id = c.customer_id
   LEFT JOIN acq ac 
   	ON ac.customer_id = COALESCE(c.customer_id, p.customer_id)
+
 ),
 
 customer_lifecyle AS (
 	SELECT
 		region,
 		CASE
-			WHEN current_mrr > 0 AND acq_date > DATE_SUB(CURRENT_DATE(), INTERVAL 1 MONTH) THEN 'New'
+			WHEN acq_date >= DATE_TRUNC(CURRENT_DATE(), MONTH) THEN 'New'
 			WHEN current_mrr = 0 AND lagged_mrr > 0 THEN 'Churn'
 			WHEN current_mrr > 0 AND lagged_mrr = 0 AND obs_date != acq_date THEN 'Reactivation'
 			WHEN current_mrr  > 0 THEN 'Retention'
@@ -100,17 +102,28 @@ marketing AS (
 		SUM(ms.cost_usd) AS marketing_spend
 	FROM cac.marketing_spend AS ms
 	WHERE
-		ms.date BETWEEN
-    		DATE_SUB((SELECT MAX(date) FROM cac.marketing_spend), INTERVAL 1 MONTH) AND (SELECT MAX(date) FROM cac.marketing_spend)
+		DATE_TRUNC(ms.date, MONTH) = DATE_TRUNC(CURRENT_DATE(), MONTH)
+	GROUP BY 1
+),
+
+acq_in_current_month AS (
+	SELECT 
+		region,
+		COUNT(*) AS n_acq_gross
+	FROM acq
+	WHERE DATE_TRUNC(acq_date, MONTH) = DATE_TRUNC(CURRENT_DATE(), MONTH)
 	GROUP BY 1
 )
 
 SELECT
   mf.*,
+  acm.n_acq_gross,
   gm.net_revenue,
   gm.gross_profit,
   m.marketing_spend
 FROM mrr_final AS mf
+LEFT JOIN acq_in_current_month AS acm
+	ON mf.region = acm.region
 LEFT JOIN gm_month AS gm
   ON mf.region = gm.region
 LEFT JOIN marketing AS m
