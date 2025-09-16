@@ -228,7 +228,7 @@ shopee_data AS (
 		'N/A' AS brand,  -- No brand differentiation for Shopee
 		so.username_buyer_ AS customer_id,
 		CAST(NULL AS STRING) AS email,  -- Email not available from Shopee
-		CAST(NULL AS STRING) AS charge_id,
+		so.order_id AS charge_id,
 		CAST(NULL AS STRING) AS order_sys_id,
 		CAST(NULL AS STRING) AS payment_intent_id,
 		CAST(NULL AS STRING) AS subscription_id,
@@ -263,11 +263,12 @@ shopee_data AS (
 	-- Join quantity data (separate table for Shopee)
 	LEFT JOIN google_sheets.shopee_order_quantities AS q
 		ON so.order_id = q.order_id
+		AND so.sku_reference = q.sku_reference_no_
 	
 	-- Join product costs with date and SKU validation
 	LEFT JOIN finance_metrics.shopee_product_costs AS sc
 		ON so.product_id = sc.product_id
-		AND q.sku_reference_no_ = sc.sku_reference_no_
+		AND so.sku_reference = sc.sku_reference_no_
 		AND DATE(so.payout_completed_date) BETWEEN sc.from_date AND sc.to_date
 	
 	-- Map medical conditions to transaction types
