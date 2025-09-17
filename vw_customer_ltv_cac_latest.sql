@@ -92,7 +92,9 @@ gm_month AS (
 	FROM finance_metrics.monthly_contribution_margin gm
 	WHERE
 		-- first day of prior month
-  		gm.date = DATE_SUB(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 1 MONTH) 
+  		1 = 1
+  		AND gm.date = DATE_TRUNC(CURRENT_DATE(), MONTH)
+  		AND (gm.condition IS NULL OR gm.condition <> 'Services')
 	GROUP BY 1,2
 ),
 

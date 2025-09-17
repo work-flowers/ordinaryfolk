@@ -12,6 +12,7 @@ WITH customers_monthly AS (
             -- Otherwise keep first of month
             ELSE DATE_TRUNC(obs_date, MONTH)
         END AS obs_date,
+        condition,
         mrr_usd AS mrr_usd
     FROM all_stripe.subscription_metrics
     WHERE
