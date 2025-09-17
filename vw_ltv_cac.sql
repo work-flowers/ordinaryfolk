@@ -21,7 +21,8 @@ churn_info AS (
 		SUM(n_customers) AS n_churned_customers,
 		SUM(lagged_mrr) AS churned_mrr		
 	FROM finance_metrics.customer_lifecycle_monthly
-	WHERE lifecycle = 'Churn'
+	WHERE 
+		lifecycle = 'Churn'
 	GROUP BY 1,2
 ),
 
@@ -33,6 +34,8 @@ gm_inputs AS (
 		SUM(cogs) AS cogs,
 		SUM(marketing_cost) AS marketing_cost
 	FROM finance_metrics.monthly_contribution_margin
+	WHERE
+		(condition IS NULL OR condition <> 'Services')
 	GROUP BY 1,2
 )
 
