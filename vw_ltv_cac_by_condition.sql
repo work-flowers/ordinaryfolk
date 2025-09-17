@@ -36,6 +36,7 @@ gm_inputs AS (
 		SUM(cogs) AS cogs,
 		SUM(marketing_cost) AS marketing_cost
 	FROM finance_metrics.monthly_contribution_margin
+	WHERE (condition IS NULL OR condition <> 'Services')
 	GROUP BY 1,2,3
 )
 
