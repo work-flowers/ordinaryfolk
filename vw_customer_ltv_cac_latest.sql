@@ -86,7 +86,6 @@ mrr_final AS (
 gm_month AS (
 	SELECT
 		gm.country AS region,
-		gm.date AS month_date,           
     	SUM(gm.net_revenue) AS net_revenue,
     	SUM(gross_profit) AS gross_profit    
 	FROM finance_metrics.monthly_contribution_margin gm
@@ -95,7 +94,7 @@ gm_month AS (
   		1 = 1
   		AND gm.date = DATE_TRUNC(CURRENT_DATE(), MONTH)
   		AND (gm.condition IS NULL OR gm.condition <> 'Services')
-	GROUP BY 1,2
+	GROUP BY 1
 ),
 
 marketing AS (
