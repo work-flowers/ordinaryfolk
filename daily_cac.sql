@@ -47,7 +47,6 @@ acquisitions AS (
 	WHERE 
 		rn = 1
 	GROUP BY 1,2,3
-	
 )
 
 SELECT
