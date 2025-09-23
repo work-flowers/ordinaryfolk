@@ -2,7 +2,11 @@ WITH marketing AS (
 	SELECT
 		date,
 		country_code AS country,
-		COALESCE(condition, 'N/A') AS condition,
+		CASE 
+			WHEN condition IN ('ED', 'PE') THEN 'ED + PE'
+			WHEN condition IS NOT NULL THEN condition
+			ELSE 'N/A'
+			END AS condition,
 		SUM(cost_usd) AS marketing_spend
 	FROM cac.marketing_spend
 	GROUP BY 1,2,3
@@ -22,7 +26,11 @@ acq_dates AS (
 	SELECT
 		sh.customer_id,
 		sh.region,
-		COALESCE(sh.condition, 'N/A') AS condition,
+		CASE 
+			WHEN condition IN ('ED', 'PE') THEN 'ED + PE'
+			WHEN condition IS NOT NULL THEN condition
+			ELSE 'N/A'
+			END AS condition,
 		sh.obs_date AS acquired_date,
 		sh.mrr_usd,
 		ROW_NUMBER() OVER (
@@ -54,7 +62,7 @@ SELECT
 	mar.country,
 	mar.marketing_spend,
 	mar.condition,
-	COALESCE(a.n_new_customers,0)
+	COALESCE(a.n_new_customers,0) AS n_new_customers
 FROM marketing AS mar
 LEFT JOIN acquisitions AS a
 	ON mar.date = a.acquired_date
