@@ -61,7 +61,6 @@ acquisitions AS (
 	GROUP BY 1,2,3
 )
 
-
 SELECT
 	mar.date,
 	mar.country,

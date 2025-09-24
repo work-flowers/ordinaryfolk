@@ -45,7 +45,7 @@ cm1 AS (
       	recurring_interval_count,
   		gst_vat AS gst_vat_rate,
   		SUM(amount) AS revenue,
-  		SUM(cogs) AS cogs,
+  		SUM(cogs * (1 - SAFE_DIVIDE(amount_refunded_usd, amount))) AS cogs,
   		SUM(packaging) AS packaging,
   		SUM(cashback) AS cashback,
   		SUM((amount - amount_refunded_usd) * (1 - 1 / (1+ gst_vat))) AS tax_paid_usd,
