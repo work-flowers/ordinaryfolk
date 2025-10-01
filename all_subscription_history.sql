@@ -52,7 +52,7 @@ mrr_by_sub AS (
         AND si.subscription_id IN (
     		SELECT DISTINCT id
     		FROM all_stripe.subscription_history
-    		WHERE status = 'active'
+    		WHERE status IN ('active', 'trialing')
 		)
 ),
 
@@ -156,12 +156,16 @@ subscription_point_in_time AS (
 ),
 -- First purchase date per customer_id
 customer_first_purchase AS (
-    SELECT
-        customer_id,
-        MIN(DATE(created)) AS first_purchase_date
-    FROM all_stripe.charge
-    WHERE status = 'succeeded'
-    GROUP BY 1
+	SELECT
+		customer_id,
+		MIN(purchase_date) AS first_purchase_date
+	FROM finance_metrics.contribution_margin AS cm
+	WHERE
+		1 = 1
+		AND cm.total_charge_amount_usd > 0
+		AND customer_id IS NOT NULL
+		AND (cm.condition IS NULL OR cm.condition <> 'Services')
+GROUP BY 1
 ),
 
 # mapping of paitent to brand
@@ -178,7 +182,7 @@ SELECT
     spit.subscription_id,
     spit.customer_id,
     CASE
-        WHEN cfp.first_purchase_date < spit.created_at THEN 'Existing'
+        WHEN cfp.first_purchase_date IS NOT NULL AND cfp.first_purchase_date < spit.created_at THEN 'Existing'
         ELSE 'New'
     END AS new_existing,
     pbsi.brand,
