@@ -92,7 +92,7 @@ cell_means <- cust_period %>%
   summarise(avg_products = mean(products), .groups = "drop") %>%
   arrange(region, group, period)
 
-print(cell_means)  # should match your plotted values
+print(cell_means)  # should match plotted values in Tableau
 print(fit_region)  # SG/HK DiD effect, CI, p
 print(pooled)      # overall DiD effect
 
