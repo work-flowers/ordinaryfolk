@@ -17,7 +17,7 @@ CASE
 	WHEN ev.name LIKE 'Weight Loss%' THEN 'Weight Loss'
 	ELSE ev.name 
 	END AS condition,
-  COALESCE(tr.translation, JSON_VALUE(JSON_EXTRACT_ARRAY(s.question_answers)[SAFE_OFFSET(0)], '$.a')) AS a1,
+  COALESCE(tr.translation, TRIM(JSON_VALUE(JSON_EXTRACT_ARRAY(s.question_answers)[SAFE_OFFSET(0)], '$.a'))) AS a1,
   JSON_VALUE(JSON_EXTRACT_ARRAY(s.question_answers)[SAFE_OFFSET(0)], '$.aOther') AS aOther1,
   JSON_VALUE(JSON_EXTRACT_ARRAY(s.question_answers)[SAFE_OFFSET(1)], '$.a') AS a2,
   JSON_VALUE(JSON_EXTRACT_ARRAY(s.question_answers)[SAFE_OFFSET(1)], '$.aOther') AS aOther2
