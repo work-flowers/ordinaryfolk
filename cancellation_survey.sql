@@ -17,7 +17,7 @@ CASE
 	WHEN ev.name LIKE 'Weight Loss%' THEN 'Weight Loss'
 	ELSE ev.name 
 	END AS condition,
-  JSON_VALUE(JSON_EXTRACT_ARRAY(s.question_answers)[SAFE_OFFSET(0)], '$.a') AS a1,
+  COALESCE(tr.translation, JSON_VALUE(JSON_EXTRACT_ARRAY(s.question_answers)[SAFE_OFFSET(0)], '$.a')) AS a1,
   JSON_VALUE(JSON_EXTRACT_ARRAY(s.question_answers)[SAFE_OFFSET(0)], '$.aOther') AS aOther1,
   JSON_VALUE(JSON_EXTRACT_ARRAY(s.question_answers)[SAFE_OFFSET(1)], '$.a') AS a2,
   JSON_VALUE(JSON_EXTRACT_ARRAY(s.question_answers)[SAFE_OFFSET(1)], '$.aOther') AS aOther2
@@ -26,6 +26,7 @@ LEFT JOIN first_eval AS fe
 	ON s.patientsysid = fe.patientsysid
 LEFT JOIN all_postgres.evaluation AS ev
 	ON fe.evaluationsysid = ev.sys_id 
+LEFT JOIN google_sheets.cancellation_survey_translation	AS tr
+	ON JSON_VALUE(JSON_EXTRACT_ARRAY(s.question_answers)[SAFE_OFFSET(0)], '$.a') = tr.a_1
 WHERE 
-	s.type = 'OrderCancel' 
-
+	s.type = 'OrderCancel'
