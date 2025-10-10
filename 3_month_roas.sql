@@ -18,12 +18,34 @@ WITH marketing AS (
 	GROUP BY 1,2,3,4
 ),
 
+first_day AS (
+	SELECT 
+		customer_id, 
+		MIN(obs_date) AS first_obs_date
+  FROM all_stripe.subscription_metrics
+  WHERE 
+  	mrr_usd > 0
+  GROUP BY 1
+),
+
 acq_dates AS (
-	SELECT DISTINCT
-		sh.subscription_id,
+	SELECT
+		sh.customer_id,
 		sh.region,
-		sh.created_at AS acquired_date
+		CASE 
+			WHEN condition IN ('ED', 'PE') THEN 'ED + PE'
+			WHEN condition IS NOT NULL THEN condition
+			ELSE 'N/A'
+			END AS condition,
+		sh.obs_date AS acquired_date,
+		ROW_NUMBER() OVER (
+			PARTITION BY sh.customer_id
+			ORDER BY sh.mrr_usd DESC
+		) AS rn
 	FROM all_stripe.subscription_metrics AS sh
+	JOIN first_day AS fd
+		ON sh.customer_id = fd.customer_id
+		AND sh.obs_date = fd.first_obs_date
 	WHERE 
 		sh.mrr_usd > 0
 ),
@@ -31,22 +53,21 @@ acq_dates AS (
 acquisitions AS (
 	SELECT 
 		ad.region,
-		CASE 
-			WHEN cm.condition IN ('ED', 'PE') THEN 'ED + PE'
-			WHEN cm.condition IS NOT NULL THEN condition
-			ELSE 'N/A'
-			END AS condition,
+		ad.condition,
 		ad.acquired_date,
 		cm.brand,
-		COUNT(ad.subscription_id) AS n_new_subscriptions,
+		COUNT(ad.customer_id) AS n_new_customers,
 		SUM(COALESCE(cm.line_item_amount_usd, cm.total_charge_amount_usd)) AS gross_revenue
 	FROM acq_dates AS ad
 	INNER JOIN finance_metrics.contribution_margin AS cm
 		ON ad.region = cm.region
-		AND ad.subscription_id = cm.subscription_id
+		AND ad.customer_id = cm.customer_id
 		AND cm.purchase_date >= ad.acquired_date
 		AND cm.purchase_date < DATE_ADD(ad.acquired_date, INTERVAL 3 MONTH)
 		AND (cm.condition IS NULL OR cm.condition <> 'Services')
+		AND cm.purchase_type = 'Subscription'
+	WHERE 
+		ad.rn = 1
 	GROUP BY 1,2,3,4
 )
 
@@ -56,7 +77,7 @@ SELECT
 	mar.marketing_spend,
 	mar.condition,
 	mar.brand,
-	COALESCE(a.n_new_subscriptions, 0) AS n_new_subscriptions,
+	COALESCE(a.n_new_customers, 0) AS n_new_customers,
 	COALESCE(a.gross_revenue, 0) AS gross_revenue_first_3_months
 	
 FROM marketing AS mar
