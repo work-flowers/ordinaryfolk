@@ -5,38 +5,41 @@ WITH all_mrr AS (
 	SELECT
 		region,
 		obs_date,
+		condition,
 		SUM(CASE WHEN lifecycle = 'New' THEN n_customers ELSE 0 END) AS n_new_customers,
 		SUM(current_mrr) AS current_mrr,
 		SUM(n_customers) AS current_n_customers
 	FROM finance_metrics.customer_lifecycle_monthly
 	WHERE 
 		current_mrr > 0
-	GROUP BY 1,2
+	GROUP BY 1,2,3
 ),
 
 churn_info AS (
 	SELECT
 		region,
 		obs_date,
+		condition,
 		SUM(n_customers) AS n_churned_customers,
 		SUM(lagged_mrr) AS churned_mrr		
 	FROM finance_metrics.customer_lifecycle_monthly
 	WHERE 
 		lifecycle = 'Churn'
-	GROUP BY 1,2
+	GROUP BY 1,2,3
 ),
 
 gm_inputs AS (
 	SELECT
 		country,
 		date,
+		condition,
 		SUM(net_revenue) AS net_revenue,
 		SUM(cogs) AS cogs,
 		SUM(marketing_cost) AS marketing_cost
 	FROM finance_metrics.monthly_contribution_margin
 	WHERE
 		(condition IS NULL OR condition <> 'Services')
-	GROUP BY 1,2
+	GROUP BY 1,2,3
 )
 
 SELECT	
@@ -58,7 +61,8 @@ FROM all_mrr AS am
 LEFT JOIN churn_info AS ci
 	ON am.obs_date = ci.obs_date
 	AND am.region = ci.region
+	AND am.condition = ci.condition
 LEFT JOIN gm_inputs AS gm
 	ON am.obs_date = gm.date
 	AND am.region = gm.country
-ORDER BY 1,2
+	AND am.condition = gm.condition
