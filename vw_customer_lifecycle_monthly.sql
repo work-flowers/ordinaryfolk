@@ -66,9 +66,10 @@ SELECT
     region,
     obs_date,
     lifecycle,
+    condition,
     COUNT(DISTINCT customer_id) AS n_customers,
     SUM(current_mrr) AS current_mrr,
     SUM(lagged_mrr) AS lagged_mrr
 FROM customers_lifecyle
 WHERE lifecycle IS NOT NULL
-GROUP BY 1,2,3
+GROUP BY 1,2,3,4
