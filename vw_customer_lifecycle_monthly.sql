@@ -3,21 +3,23 @@ CREATE VIEW finance_metrics.customer_lifecycle_monthly AS
 
 WITH customers_monthly AS (
     SELECT
-        region,
-        customer_id,
+        sm.region,
+        sm.customer_id,
         CASE
             -- For canceled with zero MRR, move to first of next month
-            WHEN status = 'canceled' AND mrr_usd = 0
-            THEN DATE_TRUNC(DATE_ADD(obs_date, INTERVAL 1 MONTH), MONTH)
+            WHEN sm.status = 'canceled' AND mrr_usd = 0
+            THEN DATE_TRUNC(DATE_ADD(sm.obs_date, INTERVAL 1 MONTH), MONTH)
             -- Otherwise keep first of month
-            ELSE DATE_TRUNC(obs_date, MONTH)
+            ELSE DATE_TRUNC(sm.obs_date, MONTH)
         END AS obs_date,
-        condition,
-        mrr_usd AS mrr_usd
-    FROM all_stripe.subscription_metrics
+        sm.mrr_usd,
+        det.condition
+    FROM all_stripe.subscription_metrics AS sm
+    LEFT JOIN finance_metrics.acquisition_details AS det
+    	ON sm.customer_id = det.customer_id
     WHERE
-        (obs_date = DATE_TRUNC(obs_date, MONTH) AND mrr_usd > 0) -- First of month records
-        OR (status = 'canceled' AND mrr_usd = 0)  -- Or churn records
+        (sm.obs_date = DATE_TRUNC(sm.obs_date, MONTH) AND sm.mrr_usd > 0) -- First of month records
+        OR (sm.status = 'canceled' AND sm.mrr_usd = 0)  -- Or churn records
 ),
 
 -- Calculate lags directly - no need for the complex filling logic
@@ -25,6 +27,7 @@ customers_lagged AS (
     SELECT
         region,
         customer_id,
+        condition,
         obs_date,
         mrr_usd AS current_mrr,
         LAG(mrr_usd) OVER (
@@ -43,6 +46,7 @@ customers_lifecyle AS (
         obs_date,
         acq_date,
         customer_id,
+        condition,
         current_mrr,
         COALESCE(lagged_mrr, 0) AS lagged_mrr,
         CASE
