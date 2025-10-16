@@ -17,8 +17,9 @@ acq_dates AS (
 		sh.region,
 		CASE 
 			WHEN condition IN ('ED', 'PE') THEN 'ED + PE'
+			WHEN condition IN ('Brand', 'OTC', 'Smoking Cessation', 'Sex Toys') THEN 'Other'
 			WHEN condition IS NOT NULL THEN condition
-			ELSE 'N/A'
+			ELSE 'Other'
 			END AS condition,
 		sh.obs_date AS acquired_date,
 		ROW_NUMBER() OVER (
