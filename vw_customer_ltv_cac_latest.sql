@@ -12,17 +12,17 @@ current_pt AS (
   WHERE s.obs_date = CURRENT_DATE()
 ),
 
--- prior snapshot: last state on/before same day last month (handles missing exact date)
+-- prior snapshot: last state 30 days prior
 prior_pt AS (
   SELECT
     s.customer_id,
     s.region,
     s.mrr_usd AS prior_mrr
   FROM all_stripe.subscription_metrics s
-  WHERE s.obs_date = DATE_SUB(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 1 DAY)
+  WHERE s.obs_date = DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
 ),
 
--- acquisition date up to today (first time mrr > 0 on or before today)
+-- acquisition date (first time mrr > 0)
 acq AS (
   SELECT
     s.customer_id,
@@ -90,9 +90,8 @@ gm_month AS (
     	SUM(gross_profit) AS gross_profit    
 	FROM finance_metrics.monthly_contribution_margin gm
 	WHERE
-		-- first day of prior month
   		1 = 1
-  		AND gm.date = DATE_TRUNC(CURRENT_DATE(), MONTH)
+  		AND gm.date = DATE_TRUNC(CURRENT_DATE(), MONTH) -- MTD current month
   		AND (gm.condition IS NULL OR gm.condition <> 'Services')
 	GROUP BY 1
 ),
@@ -103,7 +102,7 @@ marketing AS (
 		SUM(ms.cost_usd) AS marketing_spend
 	FROM cac.marketing_spend AS ms
 	WHERE
-		DATE_TRUNC(ms.date, MONTH) = DATE_TRUNC(CURRENT_DATE(), MONTH)
+		DATE_TRUNC(ms.date, MONTH) = DATE_TRUNC(CURRENT_DATE(), MONTH) -- MTD current month
 	GROUP BY 1
 ),
 
