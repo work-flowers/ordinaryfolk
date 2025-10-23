@@ -6,13 +6,14 @@ WITH all_mrr AS (
 		region,
 		obs_date,
 		condition,
+		brand,
 		SUM(CASE WHEN lifecycle = 'New' THEN n_customers ELSE 0 END) AS n_new_customers,
 		SUM(current_mrr) AS current_mrr,
 		SUM(n_customers) AS current_n_customers
 	FROM finance_metrics.customer_lifecycle_monthly
 	WHERE 
 		current_mrr > 0
-	GROUP BY 1,2,3
+	GROUP BY 1,2,3,4
 ),
 
 churn_info AS (
@@ -20,12 +21,13 @@ churn_info AS (
 		region,
 		obs_date,
 		condition,
+		brand,
 		SUM(n_customers) AS n_churned_customers,
 		SUM(lagged_mrr) AS churned_mrr		
 	FROM finance_metrics.customer_lifecycle_monthly
 	WHERE 
 		lifecycle = 'Churn'
-	GROUP BY 1,2,3
+	GROUP BY 1,2,3,4
 ),
 
 gm_inputs AS (
@@ -38,19 +40,21 @@ gm_inputs AS (
 			WHEN condition IS NOT NULL THEN condition
 			ELSE 'Other'
 			END AS condition,
+		brand,
 		SUM(net_revenue) AS net_revenue,
 		SUM(cogs) AS cogs,
 		SUM(marketing_cost) AS marketing_cost
 	FROM finance_metrics.monthly_contribution_margin
 	WHERE
 		(condition IS NULL OR condition <> 'Services')
-	GROUP BY 1,2,3
+	GROUP BY 1,2,3,4
 )
 
 SELECT	
 	COALESCE(am.region, gm.country) AS region,
 	COALESCE(am.obs_date, gm.date) AS obs_date,
 	COALESCE(am.condition, gm.condition) AS condition,
+	COALESCE(am.brand, gm.brand) AS brand,
 	am.n_new_customers,
 	am.current_mrr,
 	am.current_n_customers,

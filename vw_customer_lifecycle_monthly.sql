@@ -1,10 +1,18 @@
 DROP VIEW IF EXISTS finance_metrics.customer_lifecycle_monthly;
 CREATE VIEW finance_metrics.customer_lifecycle_monthly AS 
 
-WITH customers_monthly AS (
+WITH patient_brand_stripe_ids AS (
+	SELECT DISTINCT
+		stripe_customer_id,
+		INITCAP(from_platform_env) AS brand
+	FROM all_postgres.patient
+),
+
+customers_monthly AS (
     SELECT
         sm.region,
         sm.customer_id,
+        pbsi.brand,
         CASE
             -- For canceled with zero MRR, move to first of next month
             WHEN sm.status = 'canceled' AND mrr_usd = 0
@@ -17,6 +25,8 @@ WITH customers_monthly AS (
     FROM all_stripe.subscription_metrics AS sm
     LEFT JOIN finance_metrics.acquisition_details AS det
     	ON sm.customer_id = det.customer_id
+	LEFT JOIN patient_brand_stripe_ids AS pbsi
+		ON sm.customer_id = pbsi.stripe_customer_id
     WHERE
         (sm.obs_date = DATE_TRUNC(sm.obs_date, MONTH) AND sm.mrr_usd > 0) -- First of month records
         OR (sm.status = 'canceled' AND sm.mrr_usd = 0)  -- Or churn records
@@ -27,6 +37,7 @@ customers_lagged AS (
     SELECT
         region,
         customer_id,
+        brand,
         condition,
         obs_date,
         mrr_usd AS current_mrr,
@@ -46,6 +57,7 @@ customers_lifecyle AS (
         obs_date,
         acq_date,
         customer_id,
+        brand,
         condition,
         current_mrr,
         COALESCE(lagged_mrr, 0) AS lagged_mrr,
@@ -67,9 +79,10 @@ SELECT
     obs_date,
     lifecycle,
     condition,
+    brand,
     COUNT(DISTINCT customer_id) AS n_customers,
     SUM(current_mrr) AS current_mrr,
     SUM(lagged_mrr) AS lagged_mrr
 FROM customers_lifecyle
 WHERE lifecycle IS NOT NULL
-GROUP BY 1,2,3,4
+GROUP BY 1,2,3,4,5

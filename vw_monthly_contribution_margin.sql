@@ -20,7 +20,8 @@ WITH sales_base AS (
 		billing_reason,
 		purchase_type,
 	    new_existing,
-        customer_id 
+        customer_id,
+        brand
     FROM finance_metrics.contribution_margin
 ),
 
@@ -38,6 +39,7 @@ blocks AS (
 		purchase_type,
 		new_existing,
 		customer_id,
+		brand,
 		SUM(amount) AS amount,
 		SUM(cogs * (1 - SAFE_DIVIDE(amount_refunded_usd, amount))) AS cogs,
 		SUM(packaging) AS packaging,
@@ -52,7 +54,7 @@ blocks AS (
 	    0.0 AS operating_expense,
 	    0.0 AS staff_cost
 	FROM sales_base
-	GROUP BY 1,2,3,4,5,6,7,8,9,10,11
+	GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12
     
     UNION ALL
 
@@ -69,6 +71,7 @@ blocks AS (
         CAST(NULL AS STRING) AS purchase_type,
         CAST(NULL AS STRING) AS new_existing,
         CAST(NULL AS STRING) AS customer_id,
+        brand,
         0.0 AS amount,
         0.0 AS cogs,
         0.0 AS packaging,
@@ -83,7 +86,7 @@ blocks AS (
         0.0 AS operating_expense,
         0.0 AS staff_cost
     FROM cac.marketing_spend
-    GROUP BY 1,2,3,4,5
+    GROUP BY 1,2,3,4,5,12
 
     UNION ALL
 
@@ -100,6 +103,7 @@ blocks AS (
         CAST(NULL AS STRING) AS purchase_type,
         CAST(NULL AS STRING) AS new_existing,
         CAST(NULL AS STRING) AS customer_id,
+        CAST(NULL AS STRING) AS brand,
         0.0 AS amount,
         0.0 AS cogs,
         0.0 AS packaging,
@@ -115,7 +119,7 @@ blocks AS (
         0.0 AS staff_cost
     FROM google_sheets.delivery_cost dc
     JOIN ref.fx_rates AS fx ON LOWER(dc.currency) = fx.currency
-    GROUP BY 1,2,3,4,5
+    GROUP BY 1,2,3,4,5,6
 
     UNION ALL
 
@@ -132,6 +136,7 @@ blocks AS (
         CAST(NULL AS STRING) AS purchase_type,
         CAST(NULL AS STRING) AS new_existing,
         CAST(NULL AS STRING) AS customer_id,
+        CAST(NULL AS STRING) AS brand,
         0.0 AS amount,
         0.0 AS cogs,
         0.0 AS packaging,
@@ -147,7 +152,7 @@ blocks AS (
         -SUM(o.staff_cost / fx.fx_to_usd) AS staff_cost
     FROM google_sheets.opex o
     JOIN ref.fx_rates AS fx ON LOWER(o.currency) = fx.currency
-    GROUP BY 1,2,3,4
+    GROUP BY 1,2,3,4,5
     
     UNION ALL
     -- TELECONSULTATION FEES AS COGS BLOCK
@@ -163,6 +168,7 @@ blocks AS (
 	  CAST(NULL AS STRING) AS purchase_type,
 	  CAST(NULL AS STRING) AS new_existing,
 	  CAST(NULL AS STRING) AS customer_id,
+	  CAST(NULL AS STRING) AS brand,
 	  0.0 AS amount,
 	  -SUM(o.teleconsultation_fees / fx.fx_to_usd) AS cogs,  -- use as cogs, negative if that's your convention
 	  0.0 AS packaging,
@@ -179,7 +185,7 @@ blocks AS (
 	FROM google_sheets.opex o
 	JOIN ref.fx_rates AS fx 
 		ON LOWER(o.currency) = fx.currency
-	GROUP BY 1,2,3,4,5
+	GROUP BY 1,2,3,4,5,6
 )
 
 SELECT
@@ -194,6 +200,7 @@ SELECT
   purchase_type,
   new_existing,
   customer_id,
+  brand,
 
   -- All value columns:
   amount,
