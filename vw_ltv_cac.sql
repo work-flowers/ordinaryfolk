@@ -76,7 +76,9 @@ LEFT JOIN churn_info AS ci
 	ON am.obs_date = ci.obs_date
 	AND am.region = ci.region
 	AND am.condition = ci.condition
+	AND am.brand = ci.brand
 FULL OUTER JOIN gm_inputs AS gm
 	ON am.obs_date = gm.date
 	AND am.region = gm.country
 	AND am.condition = gm.condition
+	AND am.brand = gm.brand
