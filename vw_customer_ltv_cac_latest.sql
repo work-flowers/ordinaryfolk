@@ -7,9 +7,10 @@ current_pt AS (
   SELECT
     s.customer_id,
     s.region,
-    s.mrr_usd AS current_mrr
+    SUM(s.mrr_usd) AS current_mrr
   FROM all_stripe.subscription_metrics s
   WHERE s.obs_date = CURRENT_DATE()
+  GROUP BY 1,2
 ),
 
 -- prior snapshot: last state 30 days prior
@@ -17,9 +18,10 @@ prior_pt AS (
   SELECT
     s.customer_id,
     s.region,
-    s.mrr_usd AS prior_mrr
+    SUM(s.mrr_usd) AS prior_mrr
   FROM all_stripe.subscription_metrics s
   WHERE s.obs_date = DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+  GROUP BY 1,2
 ),
 
 -- acquisition date (first time mrr > 0)
