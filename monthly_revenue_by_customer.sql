@@ -23,7 +23,7 @@ customer_revenue AS (
 		1 = 1
 		AND cm.customer_id IS NOT NULL
 		AND cm.condition IS NOT NULL
-		AND cm.condition <> 'Services'
+		AND cm.condition NOT IN ('Services', 'Delivery')
 	GROUP BY 1,2,3,4
 ),
 
