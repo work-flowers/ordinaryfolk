@@ -1,4 +1,5 @@
 WITH 
+
 dates AS (
 	SELECT
 	  DATE_TRUNC(DATE_ADD('2022-01-01', INTERVAL n MONTH), MONTH) AS obs_date
@@ -16,7 +17,8 @@ actives AS
 		AND DATE_TRUNC(DATE(_fivetran_end), MONTH) >= d.obs_date
 	WHERE 
 		1 = 1
-		AND sh.status IN ('active', 'trialing')
+		AND sh.status IN ('active','trialing','past_due')
+		AND sh.pause_collection_behavior IS NULL
 ),
 
 joined AS (
