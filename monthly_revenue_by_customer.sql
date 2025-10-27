@@ -15,6 +15,7 @@ customer_revenue AS (
 	SELECT
 		cm.customer_id,
 		cm.condition,
+		cm.product_name,
 		cm.purchase_date,
 		SUM(COALESCE(cm.line_item_amount_usd, cm.total_charge_amount_usd)) AS revenue		
 	FROM finance_metrics.contribution_margin AS cm
@@ -22,7 +23,8 @@ customer_revenue AS (
 		1 = 1
 		AND cm.customer_id IS NOT NULL
 		AND cm.condition IS NOT NULL
-	GROUP BY 1,2,3
+		AND cm.condition <> 'Services'
+	GROUP BY 1,2,3,4
 ),
 
 first_purchase AS (
@@ -48,7 +50,7 @@ final AS (
 		cm.charge_id,
 		cm.subscription_id,
 		fp.condition,
-		cm.product_name,
+		fp.product_name,
 		cm.billing_reason,
 		cm.purchase_type,
 		sub_starts.create_date AS subscription_created,
