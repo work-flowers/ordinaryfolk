@@ -17,8 +17,7 @@ actives AS
 		AND DATE_TRUNC(DATE(_fivetran_end), MONTH) >= d.obs_date
 	WHERE 
 		1 = 1
-		AND sh.status IN ('active','trialing','past_due')
-		AND sh.pause_collection_behavior IS NULL
+		AND sh.status IN ('active','trialing')
 ),
 
 joined AS (
