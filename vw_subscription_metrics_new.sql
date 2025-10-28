@@ -119,4 +119,3 @@ final AS (
 
 SELECT *
 FROM final
-ORDER BY subscription_id, obs_date
