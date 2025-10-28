@@ -24,11 +24,15 @@ customer_first_purchase AS (
 
 active_subs AS (
 	SELECT DISTINCT
-		id
-	FROM all_stripe.subscription_history
-	WHERE status IN ('active', 'trialing')
+		inv.subscription_id
+	FROM all_stripe.charge AS ch
+	INNER JOIN all_stripe.invoice AS inv
+		ON ch.invoice_id = inv.id
+		AND inv.subscription_id IS NOT NULL
+	WHERE ch.status = 'succeeded'
 ),
 
+-- latest state of each subscription
 sub_latest AS (
 	SELECT
     	sh.id AS subscription_id,
@@ -39,6 +43,8 @@ sub_latest AS (
     	DATE(sh.ended_at) AS ended_at, -- NULL if active
     	COALESCE(DATE(sh.ended_at), CURRENT_DATE()) AS end_span_date
   	FROM all_stripe.subscription_history AS sh
+  	INNER JOIN active_subs AS act
+  		ON sh.id = act.subscription_id
   	QUALIFY ROW_NUMBER() OVER (PARTITION BY sh.id ORDER BY sh._fivetran_end DESC) = 1
 ),
 
@@ -52,7 +58,7 @@ time_series AS (
     	s.ended_at,
     	s.end_span_date,
     	DATE_ADD(DATE_TRUNC(s.created_at, MONTH), INTERVAL n MONTH) AS obs_date
-	FROM sub_latest s
+	FROM sub_latest AS s
 	JOIN UNNEST(
 		GENERATE_ARRAY(0, DATE_DIFF(DATE_TRUNC(s.end_span_date, MONTH), DATE_TRUNC(s.created_at, MONTH), MONTH))
 	) AS n
@@ -77,8 +83,6 @@ mrr_by_sub AS (
         prod.name AS product_name,
         COALESCE(JSON_EXTRACT_SCALAR(prod.metadata, '$.condition'), 'Other') AS condition
     FROM all_stripe.subscription_item AS si
-    INNER JOIN active_subs AS act
-    	ON si.subscription_id = act.id
     INNER JOIN all_stripe.plan AS pl
         ON si.plan_id = pl.id
     LEFT JOIN all_stripe.product AS prod
@@ -105,7 +109,7 @@ final AS (
 		CASE
         	WHEN cfp.first_purchase_date IS NOT NULL AND cfp.first_purchase_date < ts.created_at THEN 'Existing'
         	ELSE 'New'
-    END AS new_existing
+    		END AS new_existing
 	FROM time_series AS ts
 	INNER JOIN mrr_by_sub AS mbs
 		ON ts.subscription_id = mbs.subscription_id

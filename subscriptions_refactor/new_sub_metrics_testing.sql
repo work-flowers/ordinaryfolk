@@ -63,7 +63,7 @@ SELECT
     COUNT(DISTINCT CASE WHEN current_mrr >0 THEN customer_id END) AS n_customers,
     SUM(current_mrr) AS current_mrr,
     SUM(lagged_mrr) AS lagged_mrr,
-    SUM(CASE WHEN lifecycle = 'Churn' THEN lagged_mrr ELSE 0 END) AS lagged_mrr,
+    SUM(CASE WHEN lifecycle = 'Churn' THEN lagged_mrr ELSE 0 END) AS lagged_churned_mrr,
     SAFE_DIVIDE(SUM(CASE WHEN lifecycle = 'Churn' THEN lagged_mrr ELSE 0 END), SUM(lagged_mrr)) AS churn_rate
 FROM customers_lifecyle
 WHERE lifecycle IS NOT NULL

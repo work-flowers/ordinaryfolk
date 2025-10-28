@@ -2,6 +2,7 @@
 -- were never active at any prior point in history
 
 SELECT DISTINCT 
+	region,
 	id,
 	DATE(ended_at) AS end_date,
 	DATE(_fivetran_start) AS from_date,
@@ -13,4 +14,4 @@ WHERE id IN (
 	FROM all_stripe.subscription_history
 	WHERE DATE(ended_at) <= '2025-01-01'
 )
-ORDER BY 1,2
+ORDER BY 2,3
