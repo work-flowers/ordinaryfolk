@@ -1,7 +1,7 @@
-CREATE OR REPLACE VIEW all_stripe.subscription_metrics_new AS 
+CREATE OR REPLACE VIEW all_stripe.subscription_metrics_monthly AS 
 
 WITH 
-
+-- map each customer_id to a brand
 patient_brand_stripe_ids AS (
 	SELECT DISTINCT
 		stripe_customer_id,
@@ -9,6 +9,7 @@ patient_brand_stripe_ids AS (
 	FROM all_postgres.patient
 ),
 
+-- date of first ever purchase for identifying net new customers
 customer_first_purchase AS (
 	SELECT
 		customer_id,
@@ -22,6 +23,24 @@ customer_first_purchase AS (
 	GROUP BY 1
 ),
 
+-- override for the end date of subscriptions canceled in July 2024
+july_override AS (
+	SELECT
+		inv.subscription_id,
+		MAX(DATE(ch.created)) AS last_paid
+	FROM all_stripe.charge AS ch
+	INNER JOIN all_stripe.invoice AS inv
+		ON ch.invoice_id = inv.id
+	INNER JOIN all_stripe.subscription_history AS sh
+		ON inv.subscription_id = sh.id
+		AND DATE_TRUNC(DATE(ended_at), MONTH) IN ('2024-07-01')
+	WHERE
+		1 = 1
+		AND ch.status = 'succeeded'
+	GROUP BY 1
+),
+
+-- identify all subscriptions with at least one successful charge
 active_subs AS (
 	SELECT
 		inv.subscription_id,
@@ -42,21 +61,21 @@ sub_latest AS (
     	sh.region,
     	sh.status,
     	DATE(sh.start_date) AS created_at,
---     	CASE 
---     		WHEN sh.ended_at IS NOT NULL THEN LEAST(act.last_paid, DATE(sh.ended_at))
---     		END AS ended_at,
---     	CASE 
---     		WHEN sh.ended_at IS NOT NULL THEN LEAST(act.last_paid, DATE(sh.ended_at))
---     		ELSE CURRENT_DATE
---     		END AS end_span_date	
-    	DATE(sh.ended_at) AS ended_at, -- NULL if active
-    	COALESCE(DATE(sh.ended_at), CURRENT_DATE()) AS end_span_date
+    	-- for subs canceled in July 24, we'll use the last successful charge date
+    	-- this smooths out giant cliff from bulk cancellation of lapsed subs that month
+    	COALESCE(jo.last_paid, DATE(sh.ended_at)) AS ended_at,
+    	COALESCE(jo.last_paid, DATE(sh.ended_at), CURRENT_DATE()) AS end_span_date
   	FROM all_stripe.subscription_history AS sh
+  	 -- filter for those that had a succesful charge
   	INNER JOIN active_subs AS act
   		ON sh.id = act.subscription_id
+	LEFT JOIN july_override AS jo
+		ON sh.id = jo.subscription_id
   	QUALIFY ROW_NUMBER() OVER (PARTITION BY sh.id ORDER BY sh._fivetran_end DESC) = 1
 ),
 
+-- generate monthly observation dates for all months
+-- between subscription start and either end_date or current date
 time_series AS (
 	SELECT
     	s.subscription_id,

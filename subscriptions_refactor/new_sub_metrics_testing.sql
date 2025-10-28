@@ -10,7 +10,7 @@ customers_monthly AS (
         det.condition,
         SUM(sm.mrr_usd) AS mrr_usd
         
-    FROM all_stripe.subscription_metrics_new_adjusted AS sm
+    FROM all_stripe.subscription_metrics_new AS sm
     LEFT JOIN finance_metrics.acquisition_details AS det
     	ON sm.customer_id = det.customer_id
     GROUP BY 1,2,3,4,5
@@ -58,20 +58,15 @@ customers_lifecyle AS (
     WHERE current_mrr > 0 OR lagged_mrr > 0
 )
 
-SELECT *
+SELECT
+    obs_date,
+    COUNT(DISTINCT CASE WHEN current_mrr > 0 THEN customer_id END) AS n_customers,
+    COUNT(DISTINCT CASE WHEN lifecycle = 'Churn' THEN customer_id END) AS n_churned_customers,
+    SUM(current_mrr) AS current_mrr,
+    SUM(lagged_mrr) AS lagged_mrr,
+    SUM(CASE WHEN lifecycle = 'Churn' THEN lagged_mrr ELSE 0 END) AS lagged_churned_mrr,
+    SAFE_DIVIDE(SUM(CASE WHEN lifecycle = 'Churn' THEN lagged_mrr ELSE 0 END), SUM(lagged_mrr)) AS churn_rate
 FROM customers_lifecyle
-WHERE 
-	customer_id = 'cus_IdppeLJ7pUj66q'
-
--- SELECT
---     obs_date,
---     COUNT(DISTINCT CASE WHEN current_mrr > 0 THEN customer_id END) AS n_customers,
---     COUNT(DISTINCT CASE WHEN lifecycle = 'Churn' THEN customer_id END) AS n_churned_customers,
---     SUM(current_mrr) AS current_mrr,
---     SUM(lagged_mrr) AS lagged_mrr,
---     SUM(CASE WHEN lifecycle = 'Churn' THEN lagged_mrr ELSE 0 END) AS lagged_churned_mrr,
---     SAFE_DIVIDE(SUM(CASE WHEN lifecycle = 'Churn' THEN lagged_mrr ELSE 0 END), SUM(lagged_mrr)) AS churn_rate
--- FROM customers_lifecyle
--- WHERE lifecycle IS NOT NULL
--- GROUP BY 1
--- ORDER BY 1
+WHERE lifecycle IS NOT NULL
+GROUP BY 1
+ORDER BY 1
