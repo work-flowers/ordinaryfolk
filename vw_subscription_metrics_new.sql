@@ -23,13 +23,15 @@ customer_first_purchase AS (
 ),
 
 active_subs AS (
-	SELECT DISTINCT
-		inv.subscription_id
+	SELECT
+		inv.subscription_id,
+		MAX(DATE(ch.created)) AS last_paid
 	FROM all_stripe.charge AS ch
 	INNER JOIN all_stripe.invoice AS inv
 		ON ch.invoice_id = inv.id
 		AND inv.subscription_id IS NOT NULL
 	WHERE ch.status = 'succeeded'
+	GROUP BY 1
 ),
 
 -- latest state of each subscription
@@ -40,6 +42,13 @@ sub_latest AS (
     	sh.region,
     	sh.status,
     	DATE(sh.start_date) AS created_at,
+--     	CASE 
+--     		WHEN sh.ended_at IS NOT NULL THEN LEAST(act.last_paid, DATE(sh.ended_at))
+--     		END AS ended_at,
+--     	CASE 
+--     		WHEN sh.ended_at IS NOT NULL THEN LEAST(act.last_paid, DATE(sh.ended_at))
+--     		ELSE CURRENT_DATE
+--     		END AS end_span_date	
     	DATE(sh.ended_at) AS ended_at, -- NULL if active
     	COALESCE(DATE(sh.ended_at), CURRENT_DATE()) AS end_span_date
   	FROM all_stripe.subscription_history AS sh
