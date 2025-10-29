@@ -27,13 +27,26 @@ customer_first_purchase AS (
 july_override AS (
 	SELECT
 		inv.subscription_id,
-		MAX(DATE(ch.created)) AS last_paid
+		MAX(DATE(ch.created)) AS og,
+		MAX(DATE_ADD(DATE(ch.created), INTERVAL COALESCE(int.months, 0) MONTH)) AS last_paid
 	FROM all_stripe.charge AS ch
 	INNER JOIN all_stripe.invoice AS inv
 		ON ch.invoice_id = inv.id
 	INNER JOIN all_stripe.subscription_history AS sh
 		ON inv.subscription_id = sh.id
 		AND DATE_TRUNC(DATE(ended_at), MONTH) IN ('2024-07-01')
+	LEFT JOIN(
+		SELECT DISTINCT
+			sd.subscription_id,
+			CASE
+				WHEN sd.interval = 'month' THEN CAST(interval_count AS INT64)
+				WHEN sd.interval = 'year' THEN CAST(interval_count * 12 AS INT64)
+				WHEN sd.interval = 'week' THEN CAST(interval_count * 12 / 52 AS INT64)
+				WHEN sd.interval = 'day' THEN CAST(interval_count * 12 / 365 AS INT64)
+				END AS months
+		FROM all_stripe.subscription_details AS sd
+	) AS int
+		ON inv.subscription_id = int.subscription_id
 	WHERE
 		1 = 1
 		AND ch.status = 'succeeded'
