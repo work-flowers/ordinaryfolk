@@ -92,35 +92,6 @@ time_series AS (
 	) AS n
 ),
 
-mrr_by_sub AS (
-    SELECT
-        si.subscription_id,
-        pl.currency,
-        pl.id AS plan_id,
-        pl.interval,
-        pl.interval_count,
-        pl.product_id,
-        CASE
-            WHEN pl.interval = 'month' THEN pl.amount * si.quantity / COALESCE(subs.subunits, 100) / COALESCE(pl.interval_count, 1)
-            WHEN pl.interval = 'year' THEN pl.amount * si.quantity / COALESCE(subs.subunits, 100) / (12 * COALESCE(pl.interval_count, 1))
-            WHEN pl.interval = 'week' THEN pl.amount * si.quantity / COALESCE(subs.subunits, 100) * (52 / 12) / COALESCE(pl.interval_count, 1)
-            WHEN pl.interval = 'day' THEN pl.amount * si.quantity / COALESCE(subs.subunits, 100) * (365 / 12)/ COALESCE(pl.interval_count, 1)
-            ELSE 0
-        END AS subscription_mrr,
-        JSON_EXTRACT_SCALAR(pl.metadata, '$.boxes') AS n_boxes,
-        prod.name AS product_name,
-        COALESCE(JSON_EXTRACT_SCALAR(prod.metadata, '$.condition'), 'Other') AS condition
-    FROM all_stripe.subscription_item AS si
-    INNER JOIN all_stripe.plan AS pl
-        ON si.plan_id = pl.id
-    LEFT JOIN all_stripe.product AS prod
-        ON pl.product_id = prod.id
-    LEFT JOIN ref.stripe_currency_subunits AS subs
-        ON pl.currency = subs.currency
-    WHERE
-        si.quantity > 0
-),
-
 final AS (
 	SELECT
 		ts.*,
@@ -139,7 +110,10 @@ final AS (
         	ELSE 'New'
     		END AS new_existing
 	FROM time_series AS ts
-	INNER JOIN mrr_by_sub AS mbs
+	
+	-- view with subscription-level product and mrr details
+	-- https://github.com/work-flowers/ordinaryfolk/blob/main/subscriptions_refactor/vw_subscription_details.sql
+	INNER JOIN all_stripe.subscription_details AS mbs
 		ON ts.subscription_id = mbs.subscription_id
 	LEFT JOIN ref.fx_rates AS fx
     	ON mbs.currency = fx.currency
