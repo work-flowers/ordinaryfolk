@@ -2,7 +2,7 @@ CREATE OR REPLACE VIEW all_stripe.subscription_details AS
 
 -- view to use for condition, product, and MRR details by subscription
 WITH paid_subs AS (
-	SELECT
+	SELECT DISTINCT
 		inv.subscription_id
 	FROM all_stripe.charge AS ch
 	INNER JOIN all_stripe.invoice AS inv

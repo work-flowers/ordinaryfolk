@@ -10,7 +10,7 @@ customers_monthly AS (
         det.condition,
         SUM(sm.mrr_usd) AS mrr_usd
         
-    FROM all_stripe.subscription_metrics_new AS sm
+    FROM all_stripe.subscription_metrics_monthly AS sm
     LEFT JOIN finance_metrics.acquisition_details AS det
     	ON sm.customer_id = det.customer_id
     GROUP BY 1,2,3,4,5
