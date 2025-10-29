@@ -40,19 +40,6 @@ july_override AS (
 	GROUP BY 1
 ),
 
--- identify all subscriptions with at least one successful charge
-active_subs AS (
-	SELECT
-		inv.subscription_id,
-		MAX(DATE(ch.created)) AS last_paid
-	FROM all_stripe.charge AS ch
-	INNER JOIN all_stripe.invoice AS inv
-		ON ch.invoice_id = inv.id
-		AND inv.subscription_id IS NOT NULL
-	WHERE ch.status = 'succeeded'
-	GROUP BY 1
-),
-
 -- latest state of each subscription
 sub_latest AS (
 	SELECT
@@ -66,9 +53,6 @@ sub_latest AS (
     	COALESCE(jo.last_paid, DATE(sh.ended_at)) AS ended_at,
     	COALESCE(jo.last_paid, DATE(sh.ended_at), CURRENT_DATE()) AS end_span_date
   	FROM all_stripe.subscription_history AS sh
-  	 -- filter for those that had a succesful charge
-  	INNER JOIN active_subs AS act
-  		ON sh.id = act.subscription_id
 	LEFT JOIN july_override AS jo
 		ON sh.id = jo.subscription_id
   	QUALIFY ROW_NUMBER() OVER (PARTITION BY sh.id ORDER BY sh._fivetran_end DESC) = 1
@@ -95,14 +79,14 @@ time_series AS (
 final AS (
 	SELECT
 		ts.*,
-		mbs.* EXCEPT(subscription_id, subscription_mrr),
+		sd.* EXCEPT(subscription_id, subscription_mrr),
 		CASE 
 			WHEN ts.ended_at IS NOT NULL AND DATE_TRUNC(ts.obs_date, MONTH) >= DATE_TRUNC(ts.ended_at, MONTH) THEN 0
-			ELSE mbs.subscription_mrr
+			ELSE sd.subscription_mrr
 			END AS mrr_local,
 		CASE 
 			WHEN ts.ended_at IS NOT NULL AND DATE_TRUNC(ts.obs_date, MONTH) >= DATE_TRUNC(ts.ended_at, MONTH) THEN 0
-			ELSE mbs.subscription_mrr / COALESCE(fx.fx_to_usd, 1)
+			ELSE sd.subscription_mrr / COALESCE(fx.fx_to_usd, 1)
 			END AS mrr_usd,
 		pbsi.brand,
 		CASE
@@ -113,10 +97,11 @@ final AS (
 	
 	-- view with subscription-level product and mrr details
 	-- https://github.com/work-flowers/ordinaryfolk/blob/main/subscriptions_refactor/vw_subscription_details.sql
-	INNER JOIN all_stripe.subscription_details AS mbs
-		ON ts.subscription_id = mbs.subscription_id
+	-- only includes subs with at least one successful charge
+	INNER JOIN all_stripe.subscription_details AS sd
+		ON ts.subscription_id = sd.subscription_id
 	LEFT JOIN ref.fx_rates AS fx
-    	ON mbs.currency = fx.currency
+    	ON sd.currency = fx.currency
 	LEFT JOIN patient_brand_stripe_ids AS pbsi
 		ON ts.customer_id = pbsi.stripe_customer_id
 	LEFT JOIN customer_first_purchase AS cfp
