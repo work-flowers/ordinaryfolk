@@ -76,12 +76,15 @@ stripe_data AS (
 	FROM all_stripe.charge AS ch
 	LEFT JOIN all_stripe.payment_intent AS pi
 		ON ch.payment_intent_id = pi.id
+		AND ch.region = pi.region
 	LEFT JOIN all_stripe.customer AS cust
 		ON ch.customer_id = cust.id
+		AND ch.region = cust.region
 	LEFT JOIN patient_brand_stripe_ids AS pbsi
 		ON ch.customer_id = pbsi.stripe_customer_id
 	INNER JOIN all_stripe.balance_transaction AS bt
 		ON ch.balance_transaction_id = bt.id
+		AND ch.region = bt.region
 	INNER JOIN ref.fx_rates AS fx
 		ON ch.currency = fx.currency
 	
@@ -93,8 +96,10 @@ stripe_data AS (
 	-- Join invoice and line item data for subscription/invoice-based charges
 	LEFT JOIN all_stripe.invoice AS inv
 		ON ch.invoice_id = inv.id
+		AND ch.region = inv.region
 	LEFT JOIN all_stripe.invoice_line_item AS ii
 		ON ch.invoice_id = ii.invoice_id
+		AND ch.region = ii.region
 	
 	-- Join OTC (one-time-charge) pricing for non-invoice charges
 	LEFT JOIN all_stripe.otc_price_id AS otc
@@ -111,8 +116,10 @@ stripe_data AS (
 				JSON_VALUE(pi.metadata, '$.paymentIntentPriceId')
 			)
 		) = LOWER(px.id) -- need LOWER() because price_ids extracted from otc payment_intent metadata are all lowercase
+		AND ch.region = px.region
 	LEFT JOIN all_stripe.product AS prod
 		ON px.product_id = prod.id
+		AND ch.region = prod.region
 	
 	-- Join cost data with date range validation
 	LEFT JOIN all_stripe.product_cost AS pc
