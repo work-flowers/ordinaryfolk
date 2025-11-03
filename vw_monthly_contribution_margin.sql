@@ -191,6 +191,7 @@ blocks AS (
 SELECT
   -- All grouping columns:
   source,
+  exact_date,
   date,
   country,
   condition,
