@@ -56,8 +56,8 @@ final AS (
 		sub_starts.create_date AS subscription_created,
 		sub_starts.interval,
 		sub_starts.interval_count,
-		SUM(COALESCE(cm.line_item_amount_usd, cm.total_charge_amount_usd)) AS revenue_usd,
-		MIN(MIN(DATE_TRUNC(cm.purchase_date, MONTH))) OVER(PARTITION BY cm.customer_id) AS cohort_month
+		MIN(MIN(DATE_TRUNC(cm.purchase_date, MONTH))) OVER(PARTITION BY cm.customer_id) AS cohort_month,
+		SUM(COALESCE(cm.line_item_amount_usd, cm.total_charge_amount_usd)) AS revenue_usd		
 	FROM finance_metrics.contribution_margin AS cm
 	LEFT JOIN first_purchase AS fp
 		ON cm.customer_id = fp.customer_id
@@ -68,6 +68,4 @@ final AS (
 		1 = 1
 	GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14
 )
-
-SELECT *
-FROM final
+SELECT * FROM final
