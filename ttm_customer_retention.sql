@@ -35,17 +35,16 @@ monthly_revenue_by_customer AS (
 		purchase_month,
 		region,
 		customer_id,
-		brand,
+		COALESCE(brand, 'N/A') AS brand,
 		SUM(gross_revenue) AS gross_revenue
 	FROM monthly_revenue_by_customer_and_condition
 	GROUP BY 1,2,3,4
 ),
-	
 
 monthly_revenue_enriched AS (
 	SELECT 
 		mrc.*,
-		fc.condition,
+		COALESCE(fc.condition, 'N/A') AS condition,
 		MIN(mrc.purchase_month) OVER(PARTITION BY mrc.customer_id) AS cohort
 	FROM monthly_revenue_by_customer AS mrc
 	LEFT JOIN first_condition AS fc
@@ -55,6 +54,30 @@ monthly_revenue_enriched AS (
 obs AS (
   SELECT DISTINCT purchase_month AS obs_month 
   FROM monthly_revenue_by_customer
+),
+
+-- all customers who have purchased "compound products"
+compound_buyers AS (
+	SELECT DISTINCT
+		customer_id
+	FROM finance_metrics.contribution_margin
+	WHERE product_id IN (
+		'prod_sg_ed_silchew_12345',
+		'prod_sg_ed_t20chew_12345',
+		'prod_sg_ed_tadchew_12345',
+		'prod_NulHzpHUq09RRN',
+		'prod_NulI7SPsNtDv9N',
+		'prod_sg_ed_mintad_12345',
+		'prod_sg_ed_silof_12345',
+		'prod_sg_edpe_CSilDap_12345',
+		'prod_sg_edpe_CT20Dap_12345',
+		'prod_sg_pe_DapE_12345',
+		'prod_NulIStDAhaLvwf',
+		'prod_KGK0NrkD3CCHPJ',
+		'prod_sg_edpe_pepsdap_1234',
+		'prod_sg_edpe_sildap_12345',
+		'prod_sg_edpe_t20dap_12345'
+	)
 )
 
 SELECT 
@@ -63,7 +86,10 @@ SELECT
   mre.cohort,
   mre.condition,
   mre.brand,
-  mre.customer_id
+  mre.customer_id,
+  cb.customer_id IS NOT NULL AS compound_buyer
 FROM obs AS o
 INNER JOIN monthly_revenue_enriched AS mre
   ON mre.purchase_month BETWEEN DATE_SUB(o.obs_month, INTERVAL 11 MONTH) AND o.obs_month
+LEFT JOIN compound_buyers AS cb
+	ON mre.customer_id = cb.customer_id
