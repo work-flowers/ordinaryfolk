@@ -120,6 +120,7 @@ LEFT JOIN google_sheets.campaign_condition_map AS ccm
 	ON d.campaign_name = ccm.campaign_name
 WHERE
     (d.reach > 0 OR d.ctr > 0 or d.spend > 0)
+    AND (a.brand IS NULL or a.brand IN ('Zoey', 'Noah'))
 GROUP BY 1,2,3,4,5,6,7
 
 UNION ALL
