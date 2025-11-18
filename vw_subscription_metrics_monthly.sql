@@ -89,7 +89,7 @@ time_series AS (
 	) AS n
 ),
 
-final AS (
+merged AS (
 	SELECT
 		ts.*,
 		sd.* EXCEPT(subscription_id, subscription_mrr),
@@ -119,7 +119,25 @@ final AS (
 		ON ts.customer_id = pbsi.stripe_customer_id
 	LEFT JOIN customer_first_purchase AS cfp
     	ON ts.customer_id = cfp.customer_id
-)
+),
 
+first_condition AS (
+	SELECT
+		customer_id,
+		condition
+	FROM merged
+	WHERE mrr_usd > 0
+	QUALIFY ROW_NUMBER() OVER(PARTITION BY customer_id ORDER BY obs_date ASC, mrr_usd DESC) = 1
+),
+
+final AS (
+	SELECT
+		m.* ,
+		fc.condition AS first_condition
+	FROM merged AS m
+	LEFT JOIN first_condition AS fc
+		ON m.customer_id = fc.customer_id
+
+)
 SELECT *
 FROM final
