@@ -42,7 +42,7 @@ first_condition AS (
 	QUALIFY ROW_NUMBER() OVER(
 		PARTITION BY customer_id 
 		ORDER BY 
-			purchase_month DESC, 
+			purchase_month ASC, 
 			gross_revenue DESC
 	) = 1
 ),
