@@ -1,4 +1,5 @@
-SELECT DISTINCT 
+SELECT
+	p.region,
 	p.sys_id AS patient_id,
 	INITCAP(p.gender) AS gender,
 	pp.prefecture,
@@ -19,4 +20,5 @@ LEFT JOIN all_postgres.address AS add
 	ON p.deliveryaddresssysid = add.sys_id
 LEFT JOIN ref.jp_postcode_prefix_prefecture AS pp
 	ON LEFT(REGEXP_REPLACE(add.postal, r'[^0-9]', ''), 3) = pp.postcode_prefix
-GROUP BY 1,2,3,4,5,6,7,8
+	AND p.region = 'jp'
+GROUP BY 1,2,3,4,5,6,7,8,9
