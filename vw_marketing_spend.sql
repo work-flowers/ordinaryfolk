@@ -151,7 +151,7 @@ LEFT JOIN taboola.targeting_country	AS tgt
 	ON plat.campaign_id = tgt.campaign_id
 LEFT JOIN ref.fx_rates AS fx
 	ON LOWER(plat.currency) = LOWER(fx.currency)
-LEFT JOIN google_sheets.campaign_condition_map AS ccm
+LEFT JOIN ccm
 	ON tc.name = ccm.campaign_name
 GROUP BY 1,2,3,4,5,6,7
 
