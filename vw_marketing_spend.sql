@@ -56,6 +56,12 @@ google_ad_history AS (
 	SELECT *
 	FROM google_ads.ad_history
 	QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY updated_at DESC) = 1
+),
+
+ccm AS (
+    SELECT campaign_name, condition
+    FROM google_sheets.campaign_condition_map
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY campaign_name ORDER BY campaign_name) = 1
 )
 
 SELECT
@@ -83,7 +89,7 @@ LEFT JOIN ga_account_currency AS a
 	ON s.customer_id = a.account_id
 LEFT JOIN ref.fx_rates AS fx
 	ON LOWER(a.currency_code) = fx.currency
-LEFT JOIN google_sheets.campaign_condition_map AS ccm
+LEFT JOIN ccm
 	ON google_campaigns.name = ccm.campaign_name
 GROUP BY 1,2,3,4,5,6,7,8
 
@@ -116,7 +122,7 @@ LEFT JOIN fb_account_currency AS a
 	ON CAST(d.account_id AS STRING) = a.account_id
 LEFT JOIN ref.fx_rates AS fx
 	ON LOWER(a.currency) = fx.currency
-LEFT JOIN google_sheets.campaign_condition_map AS ccm
+LEFT JOIN ccm
 	ON d.campaign_name = ccm.campaign_name
 WHERE
     (d.reach > 0 OR d.ctr > 0 or d.spend > 0)
