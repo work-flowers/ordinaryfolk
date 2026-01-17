@@ -90,53 +90,64 @@ opex AS (
 	WHERE
 		o.date IS NOT NULL
 	GROUP BY 1,2
+),
+
+combined AS (
+	SELECT
+		cm1.*,
+		d.total_delivery_cost,
+		m.cost AS total_marketing_cost,
+		
+		-- prorate delivery costs by revenue within each purchase month and country
+		SAFE_DIVIDE(cm1.revenue, 
+		  SUM(cm1.revenue) OVER (PARTITION BY cm1.purchase_month, cm1.country)
+		) * d.total_delivery_cost AS prorated_delivery_cost,
+		
+		-- prorate delivery costs by revenue within each acquisition month and country
+		SAFE_DIVIDE(cm1.revenue, 
+		  SUM(cm1.revenue) OVER (PARTITION BY cm1.acq_month, cm1.purchase_month, cm1.country)
+		) * COALESCE(m.cost, 0) AS prorated_marketing_cost,
+		
+		-- prorate teleconsultation_fees by revenue within each purchase month and country
+		SAFE_DIVIDE(cm1.revenue, 
+		  SUM(cm1.revenue) OVER (PARTITION BY cm1.purchase_month, cm1.country)
+		) * opex.teleconsultation_fees AS teleconsultation_fees,
+		
+		-- prorate dispensing_fees by revenue within each purchase month and country
+		SAFE_DIVIDE(cm1.revenue, 
+		  SUM(cm1.revenue) OVER (PARTITION BY cm1.purchase_month, cm1.country)
+		) * opex.dispensing_fees AS dispensing_fees,
+		
+		-- prorate operating_expense by revenue within each purchase month and country
+		SAFE_DIVIDE(cm1.revenue, 
+		  SUM(cm1.revenue) OVER (PARTITION BY cm1.purchase_month, cm1.country)
+		) * opex.operating_expense AS operating_expense,
+		
+		-- prorate staff_cost by revenue within each purchase month and country
+		SAFE_DIVIDE(cm1.revenue, 
+		  SUM(cm1.revenue) OVER (PARTITION BY cm1.purchase_month, cm1.country)
+		) * opex.staff_cost AS staff_cost,
+		
+		SUM(cm1.revenue) OVER (
+      		PARTITION BY cm1.customer_id, cm1.charge_id, cm1.condition, cm1.country
+      		ORDER BY cm1.purchase_month
+      		ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    	) AS running_revenue
+		
+	FROM cm1
+	LEFT JOIN delivery AS d
+		ON cm1.purchase_month = d.date
+		AND cm1.country = d.country
+	LEFT JOIN marketing AS m
+		ON cm1.acq_month = m.date
+		AND cm1.purchase_month = m.date
+		AND cm1.country = m.country
+	LEFT JOIN opex
+		ON cm1.purchase_month = opex.date
+		AND cm1.country = opex.country
+
 )
 
-
-
 SELECT
-	cm1.*,
-	d.total_delivery_cost,
-	m.cost AS total_marketing_cost,
-	
-	-- prorate delivery costs by revenue within each purchase month and country
-	SAFE_DIVIDE(cm1.revenue, 
-	  SUM(cm1.revenue) OVER (PARTITION BY cm1.purchase_month, cm1.country)
-	) * d.total_delivery_cost AS prorated_delivery_cost,
-	
-	-- prorate delivery costs by revenue within each acquisition month and country
-	SAFE_DIVIDE(cm1.revenue, 
-	  SUM(cm1.revenue) OVER (PARTITION BY cm1.acq_month, cm1.purchase_month, cm1.country)
-	) * COALESCE(m.cost, 0) AS prorated_marketing_cost,
-	
-	-- prorate teleconsultation_fees by revenue within each purchase month and country
-	SAFE_DIVIDE(cm1.revenue, 
-	  SUM(cm1.revenue) OVER (PARTITION BY cm1.purchase_month, cm1.country)
-	) * opex.teleconsultation_fees AS teleconsultation_fees,
-	
-	-- prorate dispensing_fees by revenue within each purchase month and country
-	SAFE_DIVIDE(cm1.revenue, 
-	  SUM(cm1.revenue) OVER (PARTITION BY cm1.purchase_month, cm1.country)
-	) * opex.dispensing_fees AS dispensing_fees,
-	
-	-- prorate operating_expense by revenue within each purchase month and country
-	SAFE_DIVIDE(cm1.revenue, 
-	  SUM(cm1.revenue) OVER (PARTITION BY cm1.purchase_month, cm1.country)
-	) * opex.operating_expense AS operating_expense,
-	
-	-- prorate staff_cost by revenue within each purchase month and country
-	SAFE_DIVIDE(cm1.revenue, 
-	  SUM(cm1.revenue) OVER (PARTITION BY cm1.purchase_month, cm1.country)
-	) * opex.staff_cost AS staff_cost
-	
-FROM cm1
-LEFT JOIN delivery AS d
-	ON cm1.purchase_month = d.date
-	AND cm1.country = d.country
-LEFT JOIN marketing AS m
-	ON cm1.acq_month = m.date
-	AND cm1.purchase_month = m.date
-	AND cm1.country = m.country
-LEFT JOIN opex
-	ON cm1.purchase_month = opex.date
-	AND cm1.country = opex.country
+	c.*,
+FROM combined AS c
