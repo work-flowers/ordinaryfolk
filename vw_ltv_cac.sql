@@ -31,16 +31,6 @@ churn_info AS (
 	GROUP BY 1,2,3,4
 ),
 
-all_mrr_lagged AS (
-	SELECT
-		*,
-		LAG(current_n_customers) OVER (
-			PARTITION BY region, condition, brand
-			ORDER BY obs_date
-		) AS lagged_n_customers
-	FROM all_mrr
-),
-
 gm_inputs AS (
 	SELECT
 		country,
@@ -62,26 +52,35 @@ gm_inputs AS (
 		-- filter for random countries with small marketing spend
 		AND country IN ('hk', 'jp', 'sg')
 	GROUP BY 1,2,3,4
+),
+
+combined AS (
+	SELECT
+		COALESCE(am.region, gm.country) AS region,
+		COALESCE(am.obs_date, gm.date) AS obs_date,
+		COALESCE(am.condition, gm.condition) AS condition,
+		COALESCE(am.brand, gm.brand) AS brand,
+		am.n_new_customers,
+		am.current_mrr,
+		am.current_n_customers,
+		am.n_churned_customers,
+		am.churned_mrr,
+		am.lagged_mrr AS base_mrr,
+		gm.net_revenue,
+		gm.cogs,
+		gm.marketing_cost
+	FROM all_mrr AS am
+	FULL OUTER JOIN gm_inputs AS gm
+		ON am.obs_date = gm.date
+		AND am.region = gm.country
+		AND am.condition = gm.condition
+		AND am.brand = gm.brand
 )
 
 SELECT
-	COALESCE(am.region, gm.country) AS region,
-	COALESCE(am.obs_date, gm.date) AS obs_date,
-	COALESCE(am.condition, gm.condition) AS condition,
-	COALESCE(am.brand, gm.brand) AS brand,
-	am.n_new_customers,
-	am.current_mrr,
-	am.current_n_customers,
-	am.lagged_n_customers,
-	am.n_churned_customers,
-	am.churned_mrr,
-	am.lagged_mrr AS base_mrr,
-	gm.net_revenue,
-	gm.cogs,
-	gm.marketing_cost
-FROM all_mrr_lagged AS am
-FULL OUTER JOIN gm_inputs AS gm
-	ON am.obs_date = gm.date
-	AND am.region = gm.country
-	AND am.condition = gm.condition
-	AND am.brand = gm.brand
+	*,
+	LAG(current_n_customers) OVER (
+		PARTITION BY region, condition, brand
+		ORDER BY obs_date
+	) AS lagged_n_customers
+FROM combined
