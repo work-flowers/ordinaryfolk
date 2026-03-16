@@ -58,20 +58,106 @@ The Ordinary Folk data pipeline ingests data from multiple operational systems v
 
 ### 1.2 Fivetran Connectors
 
-| Connector | BigQuery Dataset(s) | Sync Notes |
+**47 total connectors** (42 active, 5 paused). Each Google Sheets worksheet is configured as a separate Fivetran connector.
+
+#### Platform Connectors
+
+| Connector Name | Type | BigQuery Dataset | Status | Tables | Notes |
+|---|---|---|---|---|---|
+| `sg_stripe` | Stripe | `sg_stripe` | Active | 89 | Charge, invoice, subscription_history, price, product, etc. |
+| `hk_stripe` | Stripe | `hk_stripe` | Active | 43 | Same schema as SG |
+| `jp_stripe` | Stripe | `jp_stripe` | Active | 89 | Same schema as SG |
+| `sg_postgres_rds` | Aurora Postgres | `sg_postgres_rds_public` | Active | 196 | Patient, order, evaluation, consultation, survey, etc. |
+| `hk_postgres_rds` | Aurora Postgres | `hk_postgres_rds_public` | Active | 192 | Same schema as SG |
+| `jp_postgres_rds` | Aurora Postgres | `jp_postgres_rds_public` | **Paused** | 184 | ⚠️ Japan Postgres is not syncing — JP app data may be stale |
+| `facebook_ads` | Facebook Ads | `facebook_ads` | Active | 95 | Campaigns, ad sets, ads, basic_ad metrics, demographics |
+| `facebook_ads_old_bm` | Facebook Ads | — | **Paused** | 0 | Deprecated; old Business Manager account with no mappings |
+| `google_ads` | Google Ads | `google_ads` | Active | 64 | Campaign stats, criteria, account history |
+| `taboola` | Taboola | `taboola` | Active | — | Platform report, campaigns, targeting |
+| `segment` | Segment | `segment` | Active | 95 | Event tracking: pages, signed_up, tracks, checkout_completed, etc. |
+| `tableau_source` | Tableau | `tableau_source` | Active | — | Extract refresh tasks and workbook metadata |
+| `front` | Front | `front` | **Paused** | 26 | Customer support platform — not currently syncing |
+| `fivetran_metadata` | Fivetran Log | `fivetran_metadata` | Active | — | Internal Fivetran connector/sync metadata |
+
+#### Google Sheets Connectors (31 connectors — each is a separate worksheet)
+
+Each Google Sheets connector syncs a single worksheet into a table in the `google_sheets` BigQuery dataset. The Fivetran connector name follows the pattern `google_sheets.{table_name}`.
+
+**Product Cost Sheets**
+
+| Connector Name | BigQuery Table | Purpose | Status |
+|---|---|---|---|
+| `google_sheets.sg_product_cost_stripe` | `google_sheets.sg_product_cost_stripe` | Singapore product COGS per box | Active |
+| `google_sheets.hk_product_cost_stripe` | `google_sheets.hk_product_cost_stripe` | Hong Kong product COGS per box | Active |
+| `google_sheets.jp_product_cost_stripe` | `google_sheets.jp_product_cost_stripe` | Japan product COGS per box | Active |
+| `google_sheets.tiktok_cogs` | `google_sheets.tiktok_cogs` | TikTok product costs | Active |
+| `google_sheets.shopee_cogs` | `google_sheets.shopee_cogs` | Shopee product costs | Active |
+| `google_sheets.lazada_cogs` | `google_sheets.lazada_cogs` | Lazada product costs | Active |
+| `google_sheets.cod_sg_cogs` | `google_sheets.cod_sg_cogs` | SG Cash-on-Delivery product costs | Active |
+| `google_sheets.stripe_cogs` | `google_sheets.stripe_cogs` | Legacy Stripe COGS sheet | **Paused** |
+
+**Marketplace Order Sheets**
+
+| Connector Name | BigQuery Table | Purpose | Status |
+|---|---|---|---|
+| `google_sheets.tiktok_orders` | `google_sheets.tiktok_orders` | TikTok Shop order data | Active |
+| `google_sheets.shopee_orders` | `google_sheets.shopee_orders` | Shopee order data | Active |
+| `google_sheets.shopee_order_quantities` | `google_sheets.shopee_order_quantities` | Shopee order quantities (supplementary) | Active |
+| `google_sheets.lazada_orders` | `google_sheets.lazada_orders` | Lazada order data | Active |
+| `google_sheets.atome_manual` | `google_sheets.atome_manual` | Atome BNPL transaction data | Active |
+
+**COD Revenue Sheets**
+
+| Connector Name | BigQuery Table | Purpose | Status |
+|---|---|---|---|
+| `google_sheets.cod_sg_revenue` | `google_sheets.cod_sg_revenue` | SG Cash-on-Delivery revenue (current) | Active |
+| `google_sheets.cod_sg_revenue_pre_2025` | `google_sheets.cod_sg_revenue_pre_2025` | SG COD revenue (legacy, pre-2025) | Active |
+| `google_sheets.cod_hk_revenue_pre_2025` | `google_sheets.cod_hk_revenue_pre_2025` | HK COD revenue (legacy, pre-2025) | Active |
+| `google_sheets.sf_express_airway_bills` | `google_sheets.sf_express_airway_bills` | HK SF Express shipping bills | Active |
+| `google_sheets.sf_express_line_items` | `google_sheets.sf_express_line_items` | HK SF Express line item detail | Active |
+
+**Operational & Finance Sheets**
+
+| Connector Name | BigQuery Table | Purpose | Status |
+|---|---|---|---|
+| `google_sheets.delivery_cost` | `google_sheets.delivery_cost` | Shipping costs by date/country | Active |
+| `google_sheets.opex` | `google_sheets.opex` | Operating expenses (dispensing, staff, teleconsult) | Active |
+| `google_sheets.tax_rates` | `google_sheets.tax_rates` | GST/VAT rates by region | Active |
+| `google_sheets.manual_ad_spend` | `google_sheets.manual_ad_spend` | Manual ad spend (non-API platforms) | Active |
+
+**Mapping & Reference Sheets**
+
+| Connector Name | BigQuery Table | Purpose | Status |
+|---|---|---|---|
+| `google_sheets.campaign_condition_map` | `google_sheets.campaign_condition_map` | Maps ad campaigns → medical conditions | Active |
+| `google_sheets.postgres_stripe_condition_map` | `google_sheets.postgres_stripe_condition_map` | Maps Postgres conditions → Stripe conditions | Active |
+| `google_sheets.acuity_type_condition_map` | `google_sheets.acuity_type_condition_map` | Maps Acuity appointment types → conditions | Active |
+| `google_sheets.condition_transaction_type_map` | `google_sheets.condition_transaction_type_map` | Maps conditions → transaction types | Active |
+| `google_sheets.marketing_thresholds` | `google_sheets.marketing_thresholds` | Marketing CPR thresholds (configured but no table mappings) | Active |
+
+**CSAT Sheets**
+
+| Connector Name | BigQuery Table | Purpose | Status |
+|---|---|---|---|
+| `google_sheets.csat_sg` | `google_sheets.csat_sg` | Singapore customer satisfaction scores | Active |
+| `google_sheets.csat_hk` | `google_sheets.csat_hk` | Hong Kong customer satisfaction scores | Active |
+| `google_sheets.csat_jp` | `google_sheets.csat_jp` | Japan customer satisfaction scores | Active |
+
+**Inactive / Experimental**
+
+| Connector Name | BigQuery Table | Purpose | Status |
+|---|---|---|---|
+| `google_sheets.otc_ab_test` | — | OTC A/B test data (no table mappings) | **Paused** |
+
+#### Paused Connectors — Action Required
+
+| Connector | Risk | Recommendation |
 |---|---|---|
-| Stripe SG | `sg_stripe` | Live extract; includes charge, invoice, subscription_history, etc. |
-| Stripe HK | `hk_stripe` | Live extract |
-| Stripe JP | `jp_stripe` | Live extract |
-| Postgres SG | `sg_postgres_rds_public` | Patient, order, evaluation, consultation, survey tables |
-| Postgres HK | `hk_postgres_rds_public` | Same schema as SG |
-| Postgres JP | `jp_postgres_rds_public` | Same schema as SG |
-| Facebook Ads | `facebook_ads` | Campaigns, ad sets, ads, basic_ad metrics |
-| Google Ads | `google_ads` | Campaign stats, criteria, account history |
-| Taboola | `taboola` | Platform report, campaigns, targeting |
-| Segment | `segment` | Event tracking: pages, signed_up, tracks, checkout_completed, etc. |
-| Google Sheets | `google_sheets` | Manual inputs: COGS, marketplace orders, delivery costs, opex, tax rates, campaign mappings |
-| Tableau (metadata) | `tableau_source` | Extract refresh tasks and workbook metadata |
+| `jp_postgres_rds` | **High** — JP application data (patient, order, evaluation) is not syncing. Views that UNION ALL across regions will have stale JP data. | Investigate why this was paused and re-enable, or confirm JP is intentionally excluded. |
+| `google_sheets.stripe_cogs` | **Low** — superseded by the regional `sg/hk/jp_product_cost_stripe` sheets. | Confirm it's no longer needed and can remain paused. |
+| `facebook_ads_old_bm` | **None** — deprecated old Business Manager with no table mappings. | Can be deleted. |
+| `google_sheets.otc_ab_test` | **None** — experimental, never configured. | Can be deleted. |
+| `front` | **Low** — customer support data, 26 tables configured but not syncing. | Determine if Front data is needed for any reporting. |
 
 ### 1.3 BigQuery Datasets
 
@@ -629,22 +715,38 @@ Tableau extract refreshes are managed via scheduled tasks stored in `tableau_sou
 
 ### 4.1 Google Sheets Manual Inputs
 
-The following Google Sheets are used as manual data inputs via the Fivetran Google Sheets connector. These must be maintained by the Ordinary Folk team after handover:
+There are **31 separate Fivetran Google Sheets connectors** (each syncing one worksheet). Each is configured as its own connector in the Fivetran dashboard under the naming pattern `google_sheets.{table_name}`. See Section 1.2 for the complete inventory with status.
 
-| Sheet | Purpose | Update Frequency |
-|---|---|---|
-| `sg_product_cost_stripe` / `hk_…` / `jp_…` | Product COGS per box by region | When costs change |
-| `tiktok_cogs` / `shopee_cogs` / `lazada_cogs` | Marketplace product costs | When costs change |
-| `tiktok_orders` / `shopee_orders` / `lazada_orders` | Marketplace order data | Ongoing (manual entry) |
-| `atome_manual` | Atome BNPL transaction data | Ongoing |
-| `cod_sg_revenue` / `cod_hk_revenue_pre_2025` etc. | Cash-on-delivery orders | Ongoing |
-| `delivery_cost` | Shipping costs by date/country | Monthly |
-| `opex` | Operating expenses (dispensing, staff, teleconsult) | Monthly |
-| `tax_rates` | GST/VAT rates by region | When rates change |
-| `campaign_condition_map` | Maps ad campaigns to medical conditions | When new campaigns launch |
-| `manual_ad_spend` | Manual ad spend entries (non-API platforms) | As needed |
-| `postgres_stripe_condition_map` | Maps Postgres condition names to Stripe condition names | Rarely |
-| `sf_express_airway_bills` / `sf_express_line_items` | HK COD shipping data | Ongoing |
+The sheets that require **ongoing manual maintenance** after handover are:
+
+| Sheet | Purpose | Update Frequency | Impact If Stale |
+|---|---|---|---|
+| `sg_product_cost_stripe` | SG product COGS per box | When costs change | Incorrect COGS in contribution margin |
+| `hk_product_cost_stripe` | HK product COGS per box | When costs change | Incorrect COGS in contribution margin |
+| `jp_product_cost_stripe` | JP product COGS per box | When costs change | Incorrect COGS in contribution margin |
+| `tiktok_cogs` | TikTok product costs | When costs change | Incorrect TikTok COGS |
+| `shopee_cogs` | Shopee product costs | When costs change | Incorrect Shopee COGS |
+| `lazada_cogs` | Lazada product costs | When costs change | Incorrect Lazada COGS |
+| `tiktok_orders` | TikTok Shop order data | Ongoing (manual entry) | Missing TikTok revenue |
+| `shopee_orders` | Shopee order data | Ongoing (manual entry) | Missing Shopee revenue |
+| `shopee_order_quantities` | Shopee order quantities (supplementary) | Ongoing | Missing Shopee quantities |
+| `lazada_orders` | Lazada order data | Ongoing (manual entry) | Missing Lazada revenue |
+| `atome_manual` | Atome BNPL transaction data | Ongoing | Missing Atome revenue |
+| `cod_sg_revenue` | SG Cash-on-Delivery revenue | Ongoing | Missing SG COD revenue |
+| `sf_express_airway_bills` | HK SF Express shipping bills | Ongoing | Missing HK COD revenue |
+| `sf_express_line_items` | HK SF Express line items | Ongoing | Missing HK COD line detail |
+| `delivery_cost` | Shipping costs by date/country | Monthly | Incorrect CM2/CM3 margins |
+| `opex` | Operating expenses (dispensing, staff, teleconsult) | Monthly | Incorrect EBITDA |
+| `tax_rates` | GST/VAT rates by region | When rates change | Incorrect tax extraction |
+| `manual_ad_spend` | Manual ad spend (non-API platforms) | As needed | Missing marketing spend |
+| `campaign_condition_map` | Maps ad campaigns → conditions | When new campaigns launch | Unattributed ad spend |
+| `postgres_stripe_condition_map` | Maps Postgres → Stripe conditions | Rarely | Incorrect condition mapping in appointments |
+| `acuity_type_condition_map` | Maps Acuity types → conditions | Rarely | Incorrect condition in appointment data |
+| `condition_transaction_type_map` | Maps conditions → transaction types | Rarely | Incorrect transaction type classification |
+
+The following sheets are **static/legacy** and should not need updates: `cod_sg_revenue_pre_2025`, `cod_hk_revenue_pre_2025`, `cod_sg_cogs`.
+
+The following sheets are **not currently in use**: `marketing_thresholds` (configured but has no table mappings), `otc_ab_test` (paused, experimental), `stripe_cogs` (paused, superseded by regional cost sheets), `csat_sg`/`csat_hk`/`csat_jp` (active but not referenced by any pipeline views).
 
 ### 4.2 Known Quirks and Edge Cases
 
