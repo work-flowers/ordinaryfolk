@@ -66,4 +66,4 @@ Views must be created in layer order, since higher layers depend on lower ones. 
 
 ## Contact
 
-Pipeline built and maintained by Dennis Chiuten at [work.flowers](https://work.flowers) (dennis@work.flowers).
+Pipeline built by [Dennis Chiuten](https://github.com/denchiuten) at [work.flowers](https://work.flowers). No longer actively maintained after 2026-03-20.
