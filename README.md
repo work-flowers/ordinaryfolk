@@ -60,7 +60,7 @@ Views must be created in layer order, since higher layers depend on lower ones. 
 
 ## Key dependencies
 
-- **Fivetran** must be syncing for data to stay current. There are 47 connectors; see the documentation for the full inventory and status. Notable: `jp_postgres_rds` is currently paused.
+- **Fivetran** must be syncing for data to stay current. There are 47 connectors; see the documentation for the full inventory and status. Notable: the`jp_postgres_rds` sync was failing for several months until Jan 2026, resulting in stale/incomplete data.
 - **Google Sheets** (31 worksheets) are manually maintained inputs for COGS, marketplace orders, delivery costs, opex, tax rates, and campaign mappings. See Section 4.1 of the documentation for the full list with update frequencies and impact-if-stale notes.
 - **Tableau extracts** refresh on a schedule managed in Tableau Cloud. The `tableau/tableau_jobs.sql` query audits refresh status.
 
